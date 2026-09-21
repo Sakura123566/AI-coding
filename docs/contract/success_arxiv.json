@@ -1,0 +1,143 @@
+{
+  "status": "success",
+  "keyword": "Graph Neural Networks",
+  "resolved_keyword": null,
+  "count": 5,
+  "papers": [
+    {
+      "id": "P1",
+      "title": "Transformers are Graph Neural Networks",
+      "authors": [
+        "Chaitanya K. Joshi"
+      ],
+      "year": 2025,
+      "abstract": "We establish connections between the Transformer architecture, originally introduced for natural language processing, and Graph Neural Networks (GNNs) for representation learning on graphs. We show how Transformers can be viewed as message passing GNNs operating on fully connected graphs of tokens, where the self-attention mechanism capture the relative importance of all tokens w.r.t. each-other, and positional encodings provide hints about sequential ordering or structure. Thus, Transformers are expressive set processing networks that learn relationships among input elements without being constrained by apriori graphs. Despite this mathematical connection to GNNs, Transformers are implemented via dense matrix operations that are significantly more efficient on modern hardware than sparse message passing. This leads to the perspective that Transformers are GNNs currently winning the hardware lottery.",
+      "url": "http://arxiv.org/abs/2506.22084v1",
+      "source": "arXiv"
+    },
+    {
+      "id": "P2",
+      "title": "Fast and Deep Graph Neural Networks",
+      "authors": [
+        "Claudio Gallicchio",
+        "Alessio Micheli"
+      ],
+      "year": 2019,
+      "abstract": "We address the efficiency issue for the construction of a deep graph neural network (GNN). The approach exploits the idea of representing each input graph as a fixed point of a dynamical system (implemented through a recurrent neural network), and leverages a deep architectural organization of the recurrent units. Efficiency is gained by many aspects, including the use of small and very sparse networks, where the weights of the recurrent units are left untrained under the stability condition introduced in this work. This can be viewed as a way to study the intrinsic power of the architecture of a deep GNN, and also to provide insights for the set-up of more complex fully-trained models. Through experimental results, we show that even without training of the recurrent connections, the architecture of small deep GNN is surprisingly able to achieve or improve the state-of-the-art performance on a significant set of tasks in the field of graphs classification.",
+      "url": "http://arxiv.org/abs/1911.08941v1",
+      "source": "arXiv"
+    },
+    {
+      "id": "P3",
+      "title": "Modern graph neural networks do worse than classical greedy algorithms in solving combinatorial optimization problems like maximum independent set",
+      "authors": [
+        "Maria Chiara Angelini",
+        "Federico Ricci-Tersenghi"
+      ],
+      "year": 2022,
+      "abstract": "The recent work ``Combinatorial Optimization with Physics-Inspired Graph Neural Networks'' [Nat Mach Intell 4 (2022) 367] introduces a physics-inspired unsupervised Graph Neural Network (GNN) to solve combinatorial optimization problems on sparse graphs. To test the performances of these GNNs, the authors of the work show numerical results for two fundamental problems: maximum cut and maximum independent set (MIS). They conclude that \"the graph neural network optimizer performs on par or outperforms existing solvers, with the ability to scale beyond the state of the art to problems with millions of variables.\" In this comment, we show that a simple greedy algorithm, running in almost linear time, can find solutions for the MIS problem of much better quality than the GNN. The greedy algorithm is faster by a factor of $10^4$ with respect to the GNN for problems with a million variables. We do not see any good reason for solving the MIS with these GNN, as well as for using a sledgehammer to crack nuts. In general, many claims of superiority of neural networks in solving combinatorial problems are at risk of being not solid enough, since we lack standard benchmarks based on really hard problems. We propose one of such hard benchmarks, and we hope to see future neural network optimizers tested on these problems before any claim of superiority is made.",
+      "url": "http://arxiv.org/abs/2206.13211v2",
+      "source": "arXiv"
+    },
+    {
+      "id": "P4",
+      "title": "Analyzing the Performance of Graph Neural Networks with Pipe Parallelism",
+      "authors": [
+        "Matthew T. Dearing",
+        "Xiaoyan Wang"
+      ],
+      "year": 2020,
+      "abstract": "Many interesting datasets ubiquitous in machine learning and deep learning can be described via graphs. As the scale and complexity of graph-structured datasets increase, such as in expansive social networks, protein folding, chemical interaction networks, and material phase transitions, improving the efficiency of the machine learning techniques applied to these is crucial. In this study, we focus on Graph Neural Networks (GNN) that have found great success in tasks such as node or edge classification and link prediction. However, standard GNN models have scaling limits due to necessary recursive calculations performed through dense graph relationships that lead to memory and runtime bottlenecks. While new approaches for processing larger networks are needed to advance graph techniques, and several have been proposed, we study how GNNs could be parallelized using existing tools and frameworks that are known to be successful in the deep learning community. In particular, we investigate applying pipeline parallelism to GNN models with GPipe, introduced by Google in 2018.",
+      "url": "http://arxiv.org/abs/2012.10840v2",
+      "source": "arXiv"
+    },
+    {
+      "id": "P5",
+      "title": "Deep Graph Neural Networks with Shallow Subgraph Samplers",
+      "authors": [
+        "Hanqing Zeng",
+        "Muhan Zhang",
+        "Yinglong Xia",
+        "Ajitesh Srivastava",
+        "Andrey Malevich",
+        "Rajgopal Kannan",
+        "Viktor Prasanna",
+        "Long Jin",
+        "Ren Chen"
+      ],
+      "year": 2020,
+      "abstract": "While Graph Neural Networks (GNNs) are powerful models for learning representations on graphs, most state-of-the-art models do not have significant accuracy gain beyond two to three layers. Deep GNNs fundamentally need to address: 1). expressivity challenge due to oversmoothing, and 2). computation challenge due to neighborhood explosion. We propose a simple \"deep GNN, shallow sampler\" design principle to improve both the GNN accuracy and efficiency -- to generate representation of a target node, we use a deep GNN to pass messages only within a shallow, localized subgraph. A properly sampled subgraph may exclude irrelevant or even noisy nodes, and still preserve the critical neighbor features and graph structures. The deep GNN then smooths the informative local signals to enhance feature learning, rather than oversmoothing the global graph signals into just \"white noise\". We theoretically justify why the combination of deep GNNs with shallow samplers yields the best learning performance. We then propose various sampling algorithms and neural architecture extensions to achieve good empirical results. On the largest public graph dataset, ogbn-papers100M, we achieve state-of-the-art accuracy with an order of magnitude reduction in hardware cost.",
+      "url": "http://arxiv.org/abs/2012.01380v3",
+      "source": "arXiv"
+    }
+  ],
+  "report": {
+    "overview": "【本地样例报告，未接入模型】围绕“Graph Neural Networks”共检索到 5 篇论文。该方向大致可以分为若干个子主题，入门建议从综述或高被引工作读起，再按子方向深入。请在 .env 中配置 LLM_API_KEY 并把 LLM_PROVIDER 改为 openai，即可获得真实的研究导航报告。",
+    "themes": [
+      {
+        "name": "基础方法与代表性工作",
+        "description": "该方向的奠基性论文与常用基线。",
+        "paper_ids": [
+          "P1",
+          "P2"
+        ]
+      },
+      {
+        "name": "方法改进与变体",
+        "description": "针对原始方法的效率、效果或适用场景的改进。",
+        "paper_ids": [
+          "P3",
+          "P4"
+        ]
+      },
+      {
+        "name": "应用与评测",
+        "description": "将方法落到具体任务或数据集上的研究。",
+        "paper_ids": [
+          "P5"
+        ]
+      }
+    ],
+    "research_trends": [
+      "【样例】方法从单一模态走向多模态融合",
+      "【样例】更强调可复现实验与公开评测集",
+      "【样例】效率与落地成本成为重要评价指标"
+    ],
+    "reading_path": [
+      {
+        "step": 1,
+        "paper_ids": [
+          "P1"
+        ],
+        "reason": "【样例】先建立整体印象"
+      },
+      {
+        "step": 2,
+        "paper_ids": [
+          "P2",
+          "P3"
+        ],
+        "reason": "【样例】再读两篇代表性方法"
+      },
+      {
+        "step": 3,
+        "paper_ids": [
+          "P4",
+          "P5"
+        ],
+        "reason": "【样例】最后看应用与局限"
+      }
+    ],
+    "exploration_questions": [
+      "【样例】这些方法在中文语料/本地数据上表现如何？",
+      "【样例】近两年的评测结论是否仍然成立？",
+      "【样例】该方向有哪些公开代码与数据集可供复现？"
+    ],
+    "limitations": "【样例】本文为本地样例；真实报告的检索范围、摘要质量与 AI 归纳均存在局限，请核对原文。"
+  },
+  "report_error": null,
+  "warnings": [
+    "当前为本地样例报告（LLM_PROVIDER=mock），并非模型真实产出。"
+  ],
+  "message": null
+}

@@ -1,0 +1,41 @@
+{
+  "status": "success",
+  "keyword": "Graph Neural Networks",
+  "resolved_keyword": null,
+  "count": 2,
+  "papers": [
+    {
+      "id": "P1",
+      "title": "Transformers are Graph Neural Networks",
+      "authors": ["Chaitanya K. Joshi"],
+      "year": 2025,
+      "abstract": "We establish connections between the Transformer architecture and Graph Neural Networks...",
+      "url": "http://arxiv.org/abs/2506.xxxxx",
+      "source": "arXiv"
+    },
+    {
+      "id": "P2",
+      "title": "Fast and Deep Graph Neural Networks",
+      "authors": ["Author A", "Author B"],
+      "year": 2019,
+      "abstract": "摘要文本，可能为 null",
+      "url": null,
+      "source": "arXiv"
+    }
+  ],
+  "report": {
+    "overview": "方向概览（150-260字）",
+    "themes": [
+      { "name": "主题名称", "description": "主题说明", "paper_ids": ["P1", "P2"] }
+    ],
+    "research_trends": ["趋势归纳1", "趋势归纳2", "趋势归纳3"],
+    "reading_path": [
+      { "step": 1, "paper_ids": ["P1"], "reason": "推荐原因" }
+    ],
+    "exploration_questions": ["后续问题1", "后续问题2", "后续问题3"],
+    "limitations": "检索与归纳局限"
+  },
+  "report_error": null,
+  "warnings": [],
+  "message": null
+}

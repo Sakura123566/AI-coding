@@ -1,0 +1,7 @@
+# 依赖刻意保持最小：只有 FastAPI 与 Uvicorn（pydantic 随 FastAPI 一起安装）
+# 论文检索与模型调用全部用标准库 urllib 实现，不引入 openai / arxiv 等 SDK
+fastapi>=0.110
+uvicorn[standard]>=0.27
+
+# 仅当论文 MCP 用 WebSocket 端点（ws://...）时需要
+websocket-client>=1.7
