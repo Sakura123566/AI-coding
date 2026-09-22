@@ -18,7 +18,10 @@ from ..pipeline import run_research
 from ..repo import (
     add_message,
     add_search_event,
+    get_agent_settings,
     get_session,
+    get_user_by_id,
+    list_agent_skills,
     recent_messages,
 )
 from ..schemas import ResearchError
@@ -87,6 +90,16 @@ def _mock_reply(content: str, recalled: list[str], papers: list[dict[str, Any]],
             "把 .env 的 LLM_PROVIDER 改成 openai 并填入密钥后，这里会是模型的真实回答。")
 
 
+
+def _select_skills(skills: list[dict[str, Any]], content: str) -> list[dict[str, Any]]:
+    text = (content or "").casefold()
+    selected: list[dict[str, Any]] = []
+    for skill in skills:
+        triggers = skill.get("triggers") or []
+        if not triggers or any(str(trigger).casefold() in text for trigger in triggers):
+            selected.append(skill)
+    return selected
+
 # ----------------------------- 主流程 -----------------------------
 def answer(
     user_id: int,
@@ -106,6 +119,18 @@ def answer(
     memories = recall(user_id, content, cfg=cfg)
     recalled = [m["content"] for m in memories]
     profile_text = profile_summary_text(user_id, cfg=cfg)
+    agent_settings = get_agent_settings(user_id)
+    enabled_skills = list_agent_skills(user_id, enabled_only=True)
+    matched_skills = _select_skills(enabled_skills, content)
+    user_row = get_user_by_id(user_id) or {}
+    identity_parts = []
+    if user_row.get("real_name"):
+        identity_parts.append(f"姓名：{user_row['real_name']}")
+    if user_row.get("age") is not None:
+        identity_parts.append(f"年龄：{user_row['age']}")
+    if user_row.get("identity"):
+        identity_parts.append(f"身份：{user_row['identity']}")
+    identity_text = "；".join(identity_parts)
 
     # 2) 意图识别 + 按需检索
     intent, keyword, intent_mode = classify_intent(content, cfg)
@@ -141,7 +166,12 @@ def answer(
     # 3) 组装上下文
     papers_context = format_papers(papers) if papers else ""
     system_prompt = build_system_prompt(
-        profile_summary=profile_text, memories=recalled, papers_context=papers_context
+        profile_summary=profile_text,
+        memories=recalled,
+        papers_context=papers_context,
+        identity_text=identity_text,
+        agent_settings=agent_settings,
+        skills=matched_skills,
     )
     history = recent_messages(session_id, cfg.chat_window)
     history = [r for r in history if r["id"] != user_mid]
@@ -203,6 +233,14 @@ def answer(
             "mode": mode,
             "degraded": degraded,
             "degrade_reason": degrade_reason or search_error or None,
+            "skills_used": [str(x.get("name")) for x in matched_skills],
+            "voice": {
+                "enabled": bool(agent_settings.get("voice_enabled")),
+                "auto_play": bool(agent_settings.get("voice_auto_play")),
+                "name": agent_settings.get("voice_name") or "",
+                "rate": float(agent_settings.get("voice_rate") or 1.0),
+                "pitch": float(agent_settings.get("voice_pitch") or 1.0),
+            },
         },
     )
     chat_keywords = extract_from_message(user_id, user_mid, content, cfg)
@@ -232,4 +270,12 @@ def answer(
         "degraded": degraded,
         "degrade_reason": degrade_reason or None,
         "profile_used": bool(profile_text),
+        "skills_used": [str(x.get("name")) for x in matched_skills],
+        "voice": {
+            "enabled": bool(agent_settings.get("voice_enabled")),
+            "auto_play": bool(agent_settings.get("voice_auto_play")),
+            "name": agent_settings.get("voice_name") or "",
+            "rate": float(agent_settings.get("voice_rate") or 1.0),
+            "pitch": float(agent_settings.get("voice_pitch") or 1.0),
+        },
     }

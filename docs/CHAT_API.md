@@ -78,7 +78,15 @@
   "used_keywords": ["graph neural network", "recommender system"],
   "degraded": false,
   "degrade_reason": null,
-  "profile_used": true
+  "profile_used": true,
+  "skills_used": ["实验设计检查"],
+  "voice": {
+    "enabled": true,
+    "auto_play": true,
+    "name": "Microsoft Xiaoxiao",
+    "rate": 1.0,
+    "pitch": 1.0
+  }
 }
 ```
 
@@ -117,6 +125,10 @@
 **最少实现 3 个状态（idle / thinking / happy）也能完整演示。**
 
 ---
+
+## 二·补、智能体设置与 Skill
+
+性格、语音参数和 Skill CRUD 见 `docs/V04_API.md`。启用的 Skill 命中触发词后会注入本轮系统提示词，响应通过 `skills_used` 返回实际使用的 Skill。
 
 ## 三、长期记忆 `/api/memory`
 

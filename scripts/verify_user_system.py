@@ -101,6 +101,18 @@ class Client:
             except json.JSONDecodeError:
                 return e.code, {"raw": raw}
 
+    def call_raw(self, path: str, token: str, timeout: int = 90) -> tuple[int, bytes, str]:
+        req = urllib.request.Request(
+            self.base + path,
+            headers={"Authorization": f"Bearer {token}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.status, resp.read(), resp.headers.get("Content-Type", "")
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read(), exc.headers.get("Content-Type", "") if exc.headers else ""
+
 
 # ----------------------------- 阶段一：写数据 -----------------------------
 def phase1(client: Client, state: dict[str, Any]) -> None:
@@ -142,6 +154,31 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
           status == 200 and body.get("user", {}).get("username") == username, str(body))
     check("用户信息里不含密码哈希", "password_hash" not in json.dumps(body, ensure_ascii=False))
 
+    status, body = client.call("PATCH", "/api/auth/me",
+                               {"real_name": "张三", "age": 22, "identity": "计算机专业研究生"}, token=token)
+    check("个人资料可更新", status == 200 and body.get("user", {}).get("real_name") == "张三", str(body))
+    status, body = client.call("GET", "/api/auth/me", token=token)
+    check("姓名年龄身份可跨会话读取",
+          status == 200 and body.get("user", {}).get("age") == 22
+          and body.get("user", {}).get("identity") == "计算机专业研究生", str(body.get("user")))
+
+    status, body = client.call("PUT", "/api/agent/settings",
+                               {"personality": "strict_reviewer", "detail_level": "deep",
+                                "voice_enabled": True, "voice_rate": 1.1}, token=token)
+    check("智能体设置可保存",
+          status == 200 and body.get("settings", {}).get("personality") == "strict_reviewer"
+          and body.get("settings", {}).get("voice_enabled") is True, str(body)[:300])
+
+    status, body = client.call("POST", "/api/agent/skills",
+                               {"name": "实验设计检查", "instruction": "回答实验问题时必须写变量、对照和评价指标。",
+                                "triggers": ["实验", "对照", "指标"]}, token=token)
+    check("Skill 可添加", status == 200 and bool(body.get("skill", {}).get("id")), str(body)[:300])
+    skill_id = body.get("skill", {}).get("id")
+    state["skill_id"] = skill_id
+
+    status, body = client.call("GET", "/api/agent/skills", token=token)
+    check("Skill 列表可读取", status == 200 and any(x.get("id") == skill_id for x in (body.get("skills") or [])), str(body)[:300])
+
     print("\n[2] 会话与对话")
     status, body = client.call("POST", "/api/chat/sessions", {}, token=token)
     check("新建会话成功", status == 200 and bool(body.get("session", {}).get("id")), str(body))
@@ -157,7 +194,7 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
     check("请求带 X-Request-ID", bool(client.last_request_id), client.last_request_id)
 
     status, body = client.call("POST", "/api/chat/message",
-                               {"session_id": sid, "content": "帮我查一下图神经网络的最新论文"},
+                               {"session_id": sid, "content": "帮我查一下图神经网络在实验中的最新论文"},
                                token=token)
     check("检索意图被识别为 research", body.get("intent") == "research", str(body.get("intent")))
     check("对话内检索返回了论文", len(body.get("papers") or []) > 0, str(len(body.get("papers") or [])))
@@ -167,6 +204,9 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
           isinstance(body.get("report"), dict) and bool(body["report"].get("overview")), str(body.get("report"))[:200])
     check("科研对话返回实际检索词", bool(body.get("resolved_keyword")), str(body.get("resolved_keyword")))
     check("科研对话返回警告列表", isinstance(body.get("warnings"), list), str(body.get("warnings")))
+    check("命中的 Skill 会进入对话上下文",
+          "实验设计检查" in (body.get("skills_used") or []), str(body.get("skills_used")))
+    check("语音设置随回答返回", body.get("voice", {}).get("enabled") is True, str(body.get("voice")))
 
     status, body = client.call("POST", "/api/chat/message",
                                {"session_id": sid, "content": "这些方向里哪个更适合入门？"}, token=token)
@@ -234,7 +274,7 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
     check("样本足够时 has_enough_data 为真", body.get("has_enough_data") is True, str(body.get("sample_size")))
 
     print("\n[5] 关键词与知识图谱对接")
-    status, body = client.call("GET", f"/api/kg/keywords?user_id={user_id}")
+    status, body = client.call("GET", f"/api/kg/keywords?user_id={user_id}", token=token)
     terms = [k["term"] for k in (body.get("keywords") or [])]
     check("图谱关键词非空", len(terms) > 0, str(terms)[:200])
     check("关键词带权重与来源",
@@ -246,14 +286,14 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
     )
     check("关键词是术语而不是整句", clean, str(terms)[:200])
 
-    status, body = client.call("GET", "/api/kg/keywords")
-    check("全用户聚合也能取到关键词", status == 200 and body.get("count", 0) > 0, str(body.get("count")))
+    status, body = client.call("GET", "/api/kg/keywords", token=token)
+    check("登录用户可读取自己的关键词", status == 200 and body.get("count", 0) > 0, str(body.get("count")))
 
-    status, body = client.call("GET", f"/api/kg/events?user_id={user_id}")
+    status, body = client.call("GET", f"/api/kg/events?user_id={user_id}", token=token)
     kinds = {e["type"] for e in (body.get("events") or [])}
     check("原始事件流含检索与对话两类", "search" in kinds and "chat" in kinds, str(kinds))
 
-    status, body = client.call("GET", f"/api/kg/cooccurrence?user_id={user_id}")
+    status, body = client.call("GET", "/api/kg/cooccurrence", token=token)
     check("共现接口返回列表", status == 200 and isinstance(body.get("pairs"), list), str(body)[:160])
 
     status, body = client.call("GET", "/api/kg/health")
@@ -262,6 +302,42 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
 
     status, body = client.call("GET", "/api/profile/searches", token=token)
     check("检索记录已落库", status == 200 and body.get("count", 0) > 0, str(body.get("count")))
+
+    status, body = client.call("GET", "/api/kg/map", token=token)
+    check("长期知识图谱返回节点和边",
+          status == 200 and body.get("counts", {}).get("nodes", 0) > 0, str(body.get("counts")))
+    nodes = body.get("nodes") or []
+    node_id = nodes[-1].get("id") if nodes else None
+    status, body = client.call("GET", f"/api/kg/nodes/{node_id}", token=token)
+    check("关键词节点可回溯对话",
+          status == 200 and isinstance(body.get("events"), list) and len(body.get("events") or []) > 0, str(body)[:300])
+    other_name = f"other{int(time.time()) % 100000}"
+    other_status, other_body = client.call("POST", "/api/auth/register",
+                                           {"username": other_name, "password": "navigator123"})
+    other_token = other_body.get("token", "")
+    check("隔离测试用户注册成功", other_status == 200 and bool(other_token), str(other_body)[:200])
+    other_status, other_body = client.call("GET", f"/api/kg/nodes/{node_id}", token=other_token)
+    check("其他用户不能读取该知识节点", other_status == 404, str(other_body)[:200])
+    other_status, other_body = client.call("GET", "/api/kg/keywords", token=other_token)
+    check("其他用户只能看到自己的空图谱", other_status == 200 and other_body.get("count") == 0, str(other_body)[:200])
+
+    status, body = client.call("POST", f"/api/kg/nodes/{node_id}/analysis", token=token)
+    check("关键词节点生成利弊和下一步",
+          status == 200 and isinstance(body.get("analysis", {}).get("pros"), list)
+          and isinstance(body.get("analysis", {}).get("cons"), list), str(body)[:300])
+
+    status, body = client.call("GET", "/api/reports/weekly", token=token)
+    weekly_report = (body.get("report") or {})
+    check("周报包含真实统计与总结",
+          status == 200 and weekly_report.get("stats", {}).get("user_messages", 0) > 0
+          and bool(weekly_report.get("summary")), str(body)[:300])
+    pdf_status, pdf_bytes, pdf_type = client.call_raw("/api/reports/weekly.pdf", token)
+    check("周报可下载中文 PDF",
+          pdf_status == 200 and pdf_bytes.startswith(b"%PDF") and "application/pdf" in pdf_type,
+          f"status={pdf_status} type={pdf_type} bytes={len(pdf_bytes)}")
+
+    status, body = client.call("DELETE", f"/api/kg/nodes/{node_id}", token=token)
+    check("知识图谱分支可自主删除", status == 200 and body.get("deleted") is True, str(body))
 
     status, body = client.call("POST", "/api/research/run", {"keyword": "RAG", "limit": 3})
     check("英文缩写 RAG 会扩展为检索增强生成",
@@ -289,11 +365,28 @@ def phase2(client: Client, state: dict[str, Any]) -> None:
     status, body = client.call("GET", "/api/memory", token=token)
     check("重启后长期记忆还在", status == 200 and body.get("count", 0) > 0, str(body.get("count")))
 
-    status, body = client.call("GET", f"/api/kg/keywords?user_id={state['user_id']}")
+    status, body = client.call("GET", "/api/kg/keywords", token=token)
     check("重启后关键词还在", status == 200 and body.get("count", 0) > 0, str(body.get("count")))
 
     status, body = client.call("GET", "/api/profile", token=token)
     check("重启后画像还能读出来", status == 200 and body.get("sample_size", 0) >= 5, str(body.get("sample_size")))
+
+    status, body = client.call("GET", "/api/auth/me", token=token)
+    check("重启后姓名年龄身份仍在",
+          status == 200 and body.get("user", {}).get("real_name") == "张三"
+          and body.get("user", {}).get("age") == 22, str(body.get("user")))
+
+    status, body = client.call("GET", "/api/agent/settings", token=token)
+    check("重启后智能体设置仍在",
+          status == 200 and body.get("settings", {}).get("personality") == "strict_reviewer", str(body)[:300])
+
+    status, body = client.call("GET", "/api/agent/skills", token=token)
+    check("重启后 Skill 仍在", status == 200 and body.get("count", 0) > 0, str(body)[:300])
+
+    status, body = client.call("POST", "/api/kg/clear", token=token)
+    check("知识图谱可一键清空", status == 200 and body.get("cleared") is True, str(body))
+    status, body = client.call("GET", "/api/kg/keywords", token=token)
+    check("清空后关键词为零", status == 200 and body.get("count") == 0, str(body.get("count")))
 
 
 # ----------------------------- 主流程 -----------------------------

@@ -22,7 +22,7 @@ from .logging_setup import get_logger
 log = get_logger("db")
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent / "data" / "app.db"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
@@ -34,9 +34,13 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT    NOT NULL,
   salt          TEXT    NOT NULL,
   display_name  TEXT,
+  real_name     TEXT,
+  age           INTEGER,
+  identity      TEXT,
   avatar_id     TEXT    DEFAULT 'navi',
   created_at    TEXT    NOT NULL,
-  last_login_at TEXT
+  last_login_at TEXT,
+  updated_at    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -128,6 +132,59 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   updated_at   TEXT    NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS agent_settings (
+  user_id             INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  personality         TEXT NOT NULL DEFAULT 'rigorous_warm',
+  tone                TEXT NOT NULL DEFAULT 'professional',
+  detail_level        TEXT NOT NULL DEFAULT 'balanced',
+  language            TEXT NOT NULL DEFAULT 'zh-CN',
+  voice_enabled       INTEGER NOT NULL DEFAULT 0,
+  voice_auto_play     INTEGER NOT NULL DEFAULT 1,
+  voice_name          TEXT NOT NULL DEFAULT '',
+  voice_rate          REAL NOT NULL DEFAULT 1.0,
+  voice_pitch         REAL NOT NULL DEFAULT 1.0,
+  custom_instructions TEXT NOT NULL DEFAULT '',
+  updated_at          TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_skills (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  description      TEXT NOT NULL DEFAULT '',
+  instruction      TEXT NOT NULL,
+  trigger_keywords TEXT NOT NULL DEFAULT '[]',
+  enabled          INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_skills_user ON agent_skills(user_id, enabled, updated_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_analyses (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  term         TEXT NOT NULL,
+  summary      TEXT NOT NULL DEFAULT '',
+  pros_json    TEXT NOT NULL DEFAULT '[]',
+  cons_json    TEXT NOT NULL DEFAULT '[]',
+  next_steps_json TEXT NOT NULL DEFAULT '[]',
+  mode         TEXT NOT NULL DEFAULT 'heuristic',
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_analysis_unique ON knowledge_analyses(user_id, term);
+
+CREATE TABLE IF NOT EXISTS weekly_reports (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  week_start   TEXT NOT NULL,
+  week_end     TEXT NOT NULL,
+  report_json  TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_reports_unique ON weekly_reports(user_id, week_start);
+
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -205,6 +262,10 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     with _lock:
         target.executescript(SCHEMA)
         _ensure_column(target, "messages", "payload_json", "TEXT")
+        _ensure_column(target, "users", "real_name", "TEXT")
+        _ensure_column(target, "users", "age", "INTEGER")
+        _ensure_column(target, "users", "identity", "TEXT")
+        _ensure_column(target, "users", "updated_at", "TEXT")
         row = target.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
         current = int(row["v"] or 0)
         if current < SCHEMA_VERSION:
@@ -261,7 +322,8 @@ def reset_db() -> None:
     """仅供测试：清空业务数据（保留表结构）。"""
     conn = connect()
     with _lock:
-        for table in ("keyword_events", "messages", "sessions", "search_events", "keywords",
+        for table in ("knowledge_analyses", "weekly_reports", "agent_skills", "agent_settings",
+                      "keyword_events", "messages", "sessions", "search_events", "keywords",
                       "memory_items", "user_profiles", "users"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()

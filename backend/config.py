@@ -125,6 +125,7 @@ class Settings:
     kg_min_times: int = 2                    # 至少出现几次才对外暴露
     kg_min_weight: float = 0.2               # 权重下限，过滤噪声
     kg_default_limit: int = 200
+    report_timezone_offset_hours: float = 8.0
 
     def mcp_http_headers(self) -> dict[str, str]:
         """MCP 端点要带的请求头：自定义头 + Bearer token。"""
@@ -176,6 +177,7 @@ class Settings:
             kg_min_times=_get_int("KG_MIN_TIMES", 2),
             kg_min_weight=_get_float("KG_MIN_WEIGHT", 0.2),
             kg_default_limit=_get_int("KG_DEFAULT_LIMIT", 200),
+            report_timezone_offset_hours=_get_float("REPORT_TIMEZONE_OFFSET_HOURS", 8.0),
         )
 
 

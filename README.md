@@ -2,8 +2,10 @@
 
 科研探索与研究导航智能体全栈实现。**输入研究主题 → 检索论文 → 生成研究导航报告 → 多轮对话与证据回溯**。仓库包含 FastAPI 后端与 Vue 3 前端。
 
-当前版本：**v0.3.0**。主检索、报告、用户系统、对话、记忆、画像和知识图谱契约均已跑通。
+当前版本：**v0.4.0**。主检索、报告、用户系统、对话、记忆、画像和知识图谱契约均已跑通。
 真实模型已接 DeepSeek（`deepseek-chat`），`/api/health` 里 `llm_ready=true`；未配置 MCP 时使用 arXiv/OpenAlex 等真实来源自动降级。
+
+v0.4.0 增量：姓名/年龄/身份跨设备持久化；长期知识图谱、对话回溯、利弊分析、节点删除与一键清空；智能体性格、语音参数和用户 Skill；真实行为周报 JSON 与中文 PDF。
 
 v0.3.0 增量：科研对话会同时返回并持久化真实 `papers`、结构化 `report`、`resolved_keyword` 和 `warnings`；`RAG`、`GNN` 等常见英文缩写会扩展为完整检索词；新增 Docker、生产配置门禁和持久卷部署。
 
@@ -41,6 +43,7 @@ curl http://127.0.0.1:8000/api/health
 ```
 
 - Swagger 自测页：<http://127.0.0.1:8000/docs>
+- v0.4 新接口说明：`docs/V04_API.md`
 - 健康检查：`GET /api/health` → `{"status":"ok", ...}`
 - 主接口：`POST /api/research/run`
 - 科研对话：`POST /api/chat/message`（科研意图会直接返回结构化报告）
@@ -296,7 +299,7 @@ python scripts/verify_user_system.py --real-model    # 用 .env 里的真模型�
 
 ## 五、设计上的几条硬约束
 
-- **依赖只有 fastapi + uvicorn**，检索和模型调用全用标准库 urllib，装包失败的风险最小。
+- **运行依赖保持精简**：FastAPI/Uvicorn + ReportLab；检索与模型调用仍使用标准库 urllib，不存在大型 SDK 依赖。
 - **不伪造成功**：检索失败就报错；报告失败就返回 `report=null` + `report_error`。
 - **论文编号可追溯**：报告里的 `paper_ids` 只能是真实检索到的 P1…Pn，校验时会被过滤，编号对不上前端就能一眼看出。
 - **中文主题先转英文再检索**（`backend/llm/translate.py`）：arXiv 不吃中文查询，不翻译就会一路兜底到 Crossref，捞回一堆"初中英语中考复习"式的不相关中文水刊，报告就成了假成功。映射表命中即用（零延迟），长句交给模型整句翻译，都失败才用原文。响应里 `keyword` 是用户原输入，`resolved_keyword` 是实际检索词。

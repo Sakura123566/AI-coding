@@ -25,7 +25,7 @@ from .errors import ApiError
 from .logging_setup import get_logger, request_id, setup_logging
 from .pipeline import run_research
 from .repo import add_search_event
-from .routers import auth_api, chat_api, kg_api, memory_api, profile_api
+from .routers import agent_api, auth_api, chat_api, kg_api, memory_api, profile_api, reports_api
 from .schemas import (
     ERROR_CODES,
     MAX_KEYWORD_LEN,
@@ -34,7 +34,7 @@ from .schemas import (
     error_body,
 )
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 
 setup_logging(settings.log_level)
 configure_cache(
@@ -72,7 +72,7 @@ app = FastAPI(
 )
 
 for _router in (auth_api.router, chat_api.router, memory_api.router,
-                profile_api.router, kg_api.router):
+                profile_api.router, kg_api.router, agent_api.router, reports_api.router):
     app.include_router(_router)
 
 app.add_middleware(

@@ -20,9 +20,9 @@ def create_user(username: str, password: str, display_name: str | None = None) -
         raise ApiError("USER_EXISTS")
     digest, salt = hash_password(password)
     uid = execute(
-        "INSERT INTO users(username, password_hash, salt, display_name, created_at, last_login_at)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
-        (username, digest, salt, display_name or username, now_iso(), now_iso()),
+        "INSERT INTO users(username, password_hash, salt, display_name, created_at, last_login_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (username, digest, salt, display_name or username, now_iso(), now_iso(), now_iso()),
     )
     return get_user_by_id(uid) or {}
 
@@ -50,10 +50,25 @@ def public_user(user: dict[str, Any]) -> dict[str, Any]:
         "id": user["id"],
         "username": user["username"],
         "display_name": user.get("display_name") or user["username"],
+        "real_name": user.get("real_name"),
+        "age": user.get("age"),
+        "identity": user.get("identity"),
         "avatar_id": user.get("avatar_id") or "navi",
         "created_at": user["created_at"],
         "last_login_at": user.get("last_login_at"),
+        "updated_at": user.get("updated_at"),
     }
+
+
+def update_user_profile(user_id: int, **fields: Any) -> dict[str, Any]:
+    allowed = {"display_name", "real_name", "age", "identity", "avatar_id"}
+    clean = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    if not clean:
+        return get_user_by_id(user_id) or {}
+    clean["updated_at"] = now_iso()
+    cols = ", ".join(f"{k} = ?" for k in clean)
+    execute(f"UPDATE users SET {cols} WHERE id = ?", (*clean.values(), user_id))
+    return get_user_by_id(user_id) or {}
 
 
 # ----------------------------- 会话 -----------------------------
@@ -357,3 +372,287 @@ def recent_user_texts(user_id: int, limit: int = 20) -> list[str]:
         (user_id, max(1, min(limit, 100))),
     )
     return [r["content"] for r in rows]
+
+# ----------------------------- 智能体设置与 Skill -----------------------------
+DEFAULT_AGENT_SETTINGS = {
+    "personality": "rigorous_warm",
+    "tone": "professional",
+    "detail_level": "balanced",
+    "language": "zh-CN",
+    "voice_enabled": 0,
+    "voice_auto_play": 1,
+    "voice_name": "",
+    "voice_rate": 1.0,
+    "voice_pitch": 1.0,
+    "custom_instructions": "",
+}
+
+
+def get_agent_settings(user_id: int) -> dict[str, Any]:
+    row = query_one("SELECT * FROM agent_settings WHERE user_id = ?", (user_id,))
+    if row is None:
+        ts = now_iso()
+        execute(
+            "INSERT INTO agent_settings(user_id, updated_at) VALUES (?, ?)",
+            (user_id, ts),
+        )
+        row = query_one("SELECT * FROM agent_settings WHERE user_id = ?", (user_id,)) or {}
+    return row
+
+
+def save_agent_settings(user_id: int, **fields: Any) -> dict[str, Any]:
+    current = get_agent_settings(user_id)
+    clean = {k: v for k, v in fields.items() if k in DEFAULT_AGENT_SETTINGS and v is not None}
+    if not clean:
+        return current
+    clean["updated_at"] = now_iso()
+    cols = ", ".join(f"{k} = ?" for k in clean)
+    execute(f"UPDATE agent_settings SET {cols} WHERE user_id = ?", (*clean.values(), user_id))
+    return get_agent_settings(user_id)
+
+
+def list_agent_skills(user_id: int, enabled_only: bool = False) -> list[dict[str, Any]]:
+    where = " AND enabled = 1" if enabled_only else ""
+    rows = query(
+        f"SELECT * FROM agent_skills WHERE user_id = ?{where} ORDER BY enabled DESC, updated_at DESC",
+        (user_id,),
+    )
+    for row in rows:
+        try:
+            row["triggers"] = json.loads(row.pop("trigger_keywords") or "[]")
+        except json.JSONDecodeError:
+            row["triggers"] = []
+        row["enabled"] = bool(row["enabled"])
+    return rows
+
+
+def create_agent_skill(user_id: int, name: str, instruction: str, description: str = "",
+                       triggers: list[str] | None = None, enabled: bool = True) -> dict[str, Any]:
+    ts = now_iso()
+    sid = execute(
+        "INSERT INTO agent_skills(user_id, name, description, instruction, trigger_keywords,"
+        " enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (user_id, name.strip()[:60], description.strip()[:200], instruction.strip()[:2000],
+         json.dumps(triggers or [], ensure_ascii=False), 1 if enabled else 0, ts, ts),
+    )
+    return next(x for x in list_agent_skills(user_id) if int(x["id"]) == sid)
+
+
+def update_agent_skill(user_id: int, skill_id: int, **fields: Any) -> dict[str, Any]:
+    row = query_one("SELECT * FROM agent_skills WHERE id = ? AND user_id = ?", (skill_id, user_id))
+    if row is None:
+        raise ApiError("NOT_FOUND", http_status=404)
+    clean: dict[str, Any] = {}
+    for key in ("name", "description", "instruction"):
+        if fields.get(key) is not None:
+            clean[key] = str(fields[key]).strip()
+    if fields.get("triggers") is not None:
+        clean["trigger_keywords"] = json.dumps(fields["triggers"], ensure_ascii=False)
+    if fields.get("enabled") is not None:
+        clean["enabled"] = 1 if fields["enabled"] else 0
+    if clean:
+        clean["updated_at"] = now_iso()
+        cols = ", ".join(f"{k} = ?" for k in clean)
+        execute(f"UPDATE agent_skills SET {cols} WHERE id = ? AND user_id = ?",
+                (*clean.values(), skill_id, user_id))
+    return next(x for x in list_agent_skills(user_id) if int(x["id"]) == skill_id)
+
+
+def delete_agent_skill(user_id: int, skill_id: int) -> bool:
+    row = query_one("SELECT id FROM agent_skills WHERE id = ? AND user_id = ?", (skill_id, user_id))
+    if row is None:
+        raise ApiError("NOT_FOUND", http_status=404)
+    execute("DELETE FROM agent_skills WHERE id = ? AND user_id = ?", (skill_id, user_id))
+    return True
+
+
+# ----------------------------- 长期知识图谱 -----------------------------
+def get_keyword_node(user_id: int, node_id: int) -> dict[str, Any]:
+    row = query_one("SELECT * FROM keywords WHERE id = ? AND user_id = ?", (node_id, user_id))
+    if row is None:
+        raise ApiError("NOT_FOUND", http_status=404)
+    return row
+
+
+def knowledge_node_events(user_id: int, term: str, limit: int = 100) -> list[dict[str, Any]]:
+    events = query(
+        "SELECT * FROM keyword_events WHERE user_id = ? AND term = ? ORDER BY id DESC LIMIT ?",
+        (user_id, term, max(1, min(limit, 300))),
+    )
+    out: list[dict[str, Any]] = []
+    for event in events:
+        source_type = event["source_type"]
+        source_id = str(event["source_id"])
+        item: dict[str, Any] = {
+            "type": source_type,
+            "event_id": source_id,
+            "created_at": event["created_at"],
+        }
+        try:
+            numeric_id = int(source_id[1:]) if source_id[:1] in ("s", "m") else int(source_id)
+        except ValueError:
+            numeric_id = 0
+        if source_type == "search" and numeric_id:
+            row = query_one(
+                "SELECT s.*, ses.title AS session_title FROM search_events s"
+                " LEFT JOIN sessions ses ON ses.id = s.session_id"
+                " WHERE s.id = ? AND s.user_id = ?",
+                (numeric_id, user_id),
+            )
+            if row:
+                item.update({
+                    "question": row["keyword"],
+                    "resolved_keyword": row.get("resolved_keyword"),
+                    "source": row.get("source"),
+                    "result_count": row.get("result_count", 0),
+                    "session_id": row.get("session_id"),
+                    "session_title": row.get("session_title"),
+                })
+        elif source_type in ("chat", "message") and numeric_id:
+            msg = query_one(
+                "SELECT m.*, s.title AS session_title FROM messages m"
+                " LEFT JOIN sessions s ON s.id = m.session_id"
+                " WHERE m.id = ? AND m.user_id = ?",
+                (numeric_id, user_id),
+            )
+            if msg:
+                reply = query_one(
+                    "SELECT id, content, created_at FROM messages WHERE session_id = ?"
+                    " AND user_id = ? AND id > ? AND role = 'assistant' ORDER BY id ASC LIMIT 1",
+                    (msg["session_id"], user_id, numeric_id),
+                )
+                item.update({
+                    "question": msg["content"],
+                    "answer": (reply or {}).get("content", ""),
+                    "session_id": msg["session_id"],
+                    "session_title": msg.get("session_title"),
+                    "message_id": numeric_id,
+                })
+        if item.get("question"):
+            out.append(item)
+    return out
+
+
+def delete_knowledge_node(user_id: int, node_id: int) -> dict[str, Any]:
+    row = get_keyword_node(user_id, node_id)
+    term = row["term"]
+    event_count = query_one(
+        "SELECT COUNT(*) AS n FROM keyword_events WHERE user_id = ? AND term = ?",
+        (user_id, term),
+    )
+    execute("DELETE FROM keyword_events WHERE user_id = ? AND term = ?", (user_id, term))
+    execute("DELETE FROM knowledge_analyses WHERE user_id = ? AND term = ?", (user_id, term))
+    execute("DELETE FROM keywords WHERE id = ? AND user_id = ?", (node_id, user_id))
+    return {"deleted": True, "term": term, "events_removed": int((event_count or {}).get("n", 0))}
+
+
+def clear_knowledge_graph(user_id: int) -> dict[str, Any]:
+    counts = query_one(
+        "SELECT (SELECT COUNT(*) FROM keywords WHERE user_id = ?) AS nodes,"
+        " (SELECT COUNT(*) FROM keyword_events WHERE user_id = ?) AS events",
+        (user_id, user_id),
+    ) or {}
+    execute("DELETE FROM knowledge_analyses WHERE user_id = ?", (user_id,))
+    execute("DELETE FROM keyword_events WHERE user_id = ?", (user_id,))
+    execute("DELETE FROM keywords WHERE user_id = ?", (user_id,))
+    return {"cleared": True, "nodes_removed": int(counts.get("nodes", 0)),
+            "events_removed": int(counts.get("events", 0))}
+
+
+def get_knowledge_analysis(user_id: int, term: str) -> dict[str, Any] | None:
+    row = query_one("SELECT * FROM knowledge_analyses WHERE user_id = ? AND term = ?", (user_id, term))
+    if row is None:
+        return None
+    for src, dst in (("pros_json", "pros"), ("cons_json", "cons"), ("next_steps_json", "next_steps")):
+        try:
+            row[dst] = json.loads(row.pop(src) or "[]")
+        except json.JSONDecodeError:
+            row[dst] = []
+    return row
+
+
+def save_knowledge_analysis(user_id: int, term: str, summary: str, pros: list[str],
+                            cons: list[str], next_steps: list[str], mode: str) -> dict[str, Any]:
+    ts = now_iso()
+    execute(
+        "INSERT INTO knowledge_analyses(user_id, term, summary, pros_json, cons_json,"
+        " next_steps_json, mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(user_id, term) DO UPDATE SET summary=excluded.summary,"
+        " pros_json=excluded.pros_json, cons_json=excluded.cons_json,"
+        " next_steps_json=excluded.next_steps_json, mode=excluded.mode, updated_at=excluded.updated_at",
+        (user_id, term, summary, json.dumps(pros, ensure_ascii=False),
+         json.dumps(cons, ensure_ascii=False), json.dumps(next_steps, ensure_ascii=False),
+         mode, ts, ts),
+    )
+    return get_knowledge_analysis(user_id, term) or {}
+
+
+# ----------------------------- 周报 -----------------------------
+def save_weekly_report(user_id: int, week_start: str, week_end: str,
+                       report: dict[str, Any]) -> dict[str, Any]:
+    ts = now_iso()
+    execute(
+        "INSERT INTO weekly_reports(user_id, week_start, week_end, report_json, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(user_id, week_start) DO UPDATE SET week_end=excluded.week_end,"
+        " report_json=excluded.report_json, updated_at=excluded.updated_at",
+        (user_id, week_start, week_end, json.dumps(report, ensure_ascii=False), ts, ts),
+    )
+    return get_weekly_report(user_id, week_start) or {}
+
+
+def get_weekly_report(user_id: int, week_start: str) -> dict[str, Any] | None:
+    row = query_one(
+        "SELECT * FROM weekly_reports WHERE user_id = ? AND week_start = ?",
+        (user_id, week_start),
+    )
+    if row is None:
+        return None
+    try:
+        row["report"] = json.loads(row.pop("report_json") or "{}")
+    except json.JSONDecodeError:
+        row["report"] = {}
+    return row
+
+
+def user_between(user_id: int, start: str, end: str) -> dict[str, Any]:
+    searches = query(
+        "SELECT * FROM search_events WHERE user_id = ? AND created_at >= ? AND created_at < ?"
+        " ORDER BY created_at ASC",
+        (user_id, start, end),
+    )
+    messages = query(
+        "SELECT m.*, s.title AS session_title FROM messages m"
+        " LEFT JOIN sessions s ON s.id = m.session_id"
+        " WHERE m.user_id = ? AND m.created_at >= ? AND m.created_at < ?"
+        " ORDER BY m.id ASC",
+        (user_id, start, end),
+    )
+    memories = query(
+        "SELECT * FROM memory_items WHERE user_id = ? AND last_seen_at >= ? AND last_seen_at < ?"
+        " ORDER BY weight DESC, last_seen_at DESC LIMIT 100",
+        (user_id, start, end),
+    )
+    keywords = query(
+        "SELECT * FROM keywords WHERE user_id = ? AND last_seen_at >= ? AND last_seen_at < ?"
+        " ORDER BY weight DESC, times DESC LIMIT 100",
+        (user_id, start, end),
+    )
+    return {"searches": searches, "messages": messages, "memories": memories, "keywords": keywords}
+
+def sync_identity_memories(user_id: int, user: dict[str, Any]) -> None:
+    """资料变化时替换旧身份记忆，避免同时记得两个姓名或年龄。"""
+    execute(
+        "DELETE FROM memory_items WHERE user_id = ? AND ("
+        "content LIKE '用户的名字是%' OR content LIKE '用户的年龄是%' OR content LIKE '用户的身份是%')",
+        (user_id,),
+    )
+    entries = []
+    if user.get("real_name"):
+        entries.append(f"用户的名字是{user['real_name']}")
+    if user.get("age") is not None:
+        entries.append(f"用户的年龄是{user['age']}岁")
+    if user.get("identity"):
+        entries.append(f"用户的身份是{user['identity']}")
+    for content in entries:
+        add_memory(user_id, "profile_fact", content, weight=1.0, source_id="user_manual")

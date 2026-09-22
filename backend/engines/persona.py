@@ -16,6 +16,14 @@ from typing import Any
 
 EMOTIONS = ("idle", "thinking", "happy", "excited", "confused", "sleepy")
 
+PERSONALITY_GUIDES = {
+    "rigorous_warm": "严谨、温和、重视证据，遇到不确定结论会明确说不知道。",
+    "concise_socratic": "简洁、善于用关键追问引导用户自己梳理问题。",
+    "creative_companion": "开放、有探索感，会主动提出跨方向联想，但必须区分事实与猜想。",
+    "strict_reviewer": "像严格审稿人，优先指出证据不足、概念混淆和方法漏洞。",
+    "custom": "遵守用户自定义性格要求，但不得覆盖事实与安全规则。",
+}
+
 PERSONA = """你是 Research Navigator 的 Q 版科研导航员，名字叫 Navi。
 性格：活泼、直接、不说废话；中文为主，用户用英文提问就用英文回答。
 职责：帮用户探索研究方向、找论文、理清脉络，给可执行的下一步。
@@ -35,13 +43,44 @@ def build_system_prompt(
     profile_summary: str = "",
     memories: list[str] | None = None,
     papers_context: str = "",
+    identity_text: str = "",
+    agent_settings: dict[str, Any] | None = None,
+    skills: list[dict[str, Any]] | None = None,
 ) -> str:
+    settings = agent_settings or {}
     parts = [PERSONA]
+    personality = str(settings.get("personality") or "rigorous_warm")
+    parts.append(f"【性格要求】\n{PERSONALITY_GUIDES.get(personality, PERSONALITY_GUIDES['rigorous_warm'])}")
+    detail = {
+        "brief": "优先给结论和 3 条以内要点",
+        "balanced": "结论、依据、下一步保持平衡",
+        "deep": "给出更完整的机制、证据和对比",
+    }
+    parts.append(
+        "【表达要求】\n"
+        f"语气：{settings.get('tone') or 'professional'}；"
+        f"详细程度：{detail.get(settings.get('detail_level'), detail['balanced'])}；"
+        f"回答语言：{settings.get('language') or 'zh-CN'}。"
+    )
+    if identity_text:
+        parts.append(f"【用户主动确认的身份信息】\n{identity_text}")
     if profile_summary:
         parts.append(f"【这位用户的画像摘要】\n{profile_summary}")
     if memories:
         lines = "\n".join(f"- {m}" for m in memories[:12])
         parts.append(f"【你记得的关于这位用户的事】\n{lines}")
+    if skills:
+        skill_lines = []
+        for skill in skills[:12]:
+            name = str(skill.get("name") or "未命名 Skill")
+            instruction = str(skill.get("instruction") or "").strip()[:800]
+            if instruction:
+                skill_lines.append(f"- {name}：{instruction}")
+        if skill_lines:
+            parts.append("【用户启用且当前命中的 Skills】\n" + "\n".join(skill_lines))
+    custom = str(settings.get("custom_instructions") or "").strip()
+    if custom:
+        parts.append(f"【用户自定义要求】\n{custom[:2000]}")
     if papers_context:
         parts.append(f"【本次检索到的真实论文，只能引用这些】\n{papers_context}")
     return "\n\n".join(parts)
