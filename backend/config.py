@@ -100,6 +100,10 @@ class Settings:
 
     # 提示词里每篇摘要的最大长度，防止超长把上下文撑爆
     abstract_max_chars: int = 600
+    abstract_translation_enabled: bool = True
+    abstract_translation_max_papers: int = 12
+    abstract_translation_batch_size: int = 6
+    abstract_summary_max_chars: int = 180
 
     # 结果缓存：同一主题重复查询不再重复检索 + 重复调模型
     cache_enabled: bool = True
@@ -162,6 +166,10 @@ class Settings:
             llm_temperature=_get_float("LLM_TEMPERATURE", 0.3),
             llm_timeout=_get_int("LLM_TIMEOUT", 90),
             llm_json_mode=_get_bool("LLM_JSON_MODE", True),
+            abstract_translation_enabled=_get_bool("ABSTRACT_TRANSLATION_ENABLED", True),
+            abstract_translation_max_papers=_get_int("ABSTRACT_TRANSLATION_MAX_PAPERS", 12),
+            abstract_translation_batch_size=_get_int("ABSTRACT_TRANSLATION_BATCH_SIZE", 6),
+            abstract_summary_max_chars=_get_int("ABSTRACT_SUMMARY_MAX_CHARS", 180),
             cache_enabled=_get_bool("CACHE_ENABLED", True),
             cache_ttl=_get_int("CACHE_TTL", 600),
             cache_max_entries=_get_int("CACHE_MAX_ENTRIES", 64),

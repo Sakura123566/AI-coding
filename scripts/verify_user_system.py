@@ -116,6 +116,17 @@ class Client:
 
 # ----------------------------- 阶段一：写数据 -----------------------------
 def phase1(client: Client, state: dict[str, Any]) -> None:
+    from backend.engines.paper_enrichment import _normalize_items
+
+    sample = [{"id": "P1", "title": "Graph Neural Networks", "abstract": "Long English abstract."}]
+    normalized = _normalize_items([
+        {"id": "P1", "title_zh": "图神经网络", "abstract_zh": "这是忠实的中文摘要。", "abstract_summary_zh": "中文短摘要。"}
+    ], sample, 180)
+    check("翻译结果会被正确归一化",
+          normalized[0].get("title_zh") == "图神经网络"
+          and normalized[0].get("abstract_summary_zh") == "中文短摘要。"
+          and normalized[0].get("translation_status") == "translated", str(normalized[:1]))
+
     print("\n[1] 注册与登录")
     username = f"tester{int(time.time()) % 100000}"
     password = "navigator123"
@@ -200,6 +211,12 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
     check("对话内检索返回了论文", len(body.get("papers") or []) > 0, str(len(body.get("papers") or [])))
     check("引用编号与论文一致（P1…Pn）",
           all(p.get("id") for p in (body.get("papers") or [])), str(body.get("papers"))[:200])
+    check("论文带中文摘要字段与翻译状态",
+          all("translation_status" in p and "abstract_summary_zh" in p for p in (body.get("papers") or [])),
+          str((body.get("papers") or [])[:1])[:300])
+    check("mock 模式不伪造中文翻译",
+          all(p.get("translation_status") in ("unavailable", "original_chinese", "not_requested")
+              for p in (body.get("papers") or [])), str((body.get("papers") or [])[:1])[:300])
     check("科研对话同时返回结构化报告",
           isinstance(body.get("report"), dict) and bool(body["report"].get("overview")), str(body.get("report"))[:200])
     check("科研对话返回实际检索词", bool(body.get("resolved_keyword")), str(body.get("resolved_keyword")))

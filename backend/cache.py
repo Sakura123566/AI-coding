@@ -30,9 +30,9 @@ class ResultCache:
         self.misses = 0
 
     @staticmethod
-    def make_key(keyword: str, limit: int) -> str:
-        # 关键词忽略大小写与首尾空格：用户多打一个空格不该浪费一次模型调用
-        return f"{keyword.strip().casefold()}|{int(limit)}"
+    def make_key(keyword: str, limit: int, variant: str = "") -> str:
+        # 关键词忽略大小写与首尾空格；variant 防止换模型/来源后复用旧结果。
+        return f"{keyword.strip().casefold()}|{int(limit)}|{variant}"
 
     def get(self, key: str) -> Any | None:
         if not self.enabled:

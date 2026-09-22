@@ -37,10 +37,12 @@ def build_user_prompt(keyword: str, papers: list[dict[str, Any]], abstract_max_c
         year = p.get("year") or "年份未知"
         source = p.get("source") or "来源未知"
         authors = "、".join((p.get("authors") or [])[:3]) or "作者未知"
-        abstract = (p.get("abstract") or "该来源未提供摘要。").strip().replace("\n", " ")
+        abstract = (p.get("abstract_summary_zh") or p.get("abstract_zh") or p.get("abstract") or "该来源未提供摘要。").strip().replace("\n", " ")
         if len(abstract) > abstract_max_chars:
             abstract = abstract[:abstract_max_chars] + "…"
-        lines.append(f"[{p['id']}] {p['title']}")
+        title = p.get("title_zh") or p["title"]
+        original = f"（原文题名：{p['title']}）" if p.get("title_zh") else ""
+        lines.append(f"[{p['id']}] {title}{original}")
         lines.append(f"    年份：{year}｜来源：{source}｜作者：{authors}")
         lines.append(f"    摘要：{abstract}")
         lines.append("")

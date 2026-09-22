@@ -116,10 +116,11 @@ def format_papers(papers: list[dict[str, Any]], abstract_chars: int = 180) -> st
     """把检索到的论文压成给模型的上下文：编号、标题、年份、摘要截断。"""
     lines = []
     for p in papers:
-        abstract = (p.get("abstract") or "").replace("\n", " ").strip()
+        abstract = (p.get("abstract_summary_zh") or p.get("abstract_zh") or p.get("abstract") or "").replace("\n", " ").strip()
         if len(abstract) > abstract_chars:
             abstract = abstract[:abstract_chars] + "…"
         year = p.get("year") or "年份未知"
         authors = "、".join((p.get("authors") or [])[:3])
-        lines.append(f"[{p.get('id')}] {p.get('title')}（{year}）{authors}\n摘要：{abstract}")
+        title = p.get("title_zh") or p.get("title")
+        lines.append(f"[{p.get('id')}] {title}（{year}）{authors}\n摘要：{abstract}")
     return "\n".join(lines)

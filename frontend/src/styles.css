@@ -195,3 +195,27 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+.paper-original-title {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.paper-originals {
+  margin-top: 10px;
+  color: #47544f;
+  font-size: 12px;
+}
+.paper-originals summary {
+  color: var(--brand);
+  font-weight: 700;
+  cursor: pointer;
+}
+.paper-originals p {
+  margin: 8px 0 0;
+  line-height: 1.65;
+}
+.paper-originals p[lang="en"] {
+  color: var(--muted);
+}

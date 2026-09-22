@@ -61,7 +61,7 @@
   "intent_mode": "rule",
   "mode": "live",
   "papers": [
-    {"id": "P1", "title": "...", "authors": ["..."], "year": 2024, "abstract": "...", "url": "...", "source": "openalex"}
+    {"id": "P1", "title": "...", "title_zh": "中文标题", "authors": ["..."], "year": 2024, "abstract": "英文原文", "abstract_zh": "中文翻译", "abstract_summary_zh": "中文短摘要", "translation_status": "translated", "url": "...", "source": "openalex"}
   ],
   "report": {
     "overview": "...",

@@ -117,3 +117,19 @@ REPORT_TIMEZONE_OFFSET_HOURS=8
 ```
 
 所有数据坚持服务端 SQLite 持久化。生产部署必须给 `/app/backend/data` 挂持久卷，否则更换电脑可以登录，但容器重建后数据会丢失。
+## 7. 论文摘要中文化
+
+每篇 `papers[]` 会新增：
+
+```json
+{
+  "title_zh": "中文标题",
+  "abstract": "原始英文摘要",
+  "abstract_zh": "忠实中文翻译或压缩翻译",
+  "abstract_summary_zh": "默认展示的 60-120 字中文短摘要",
+  "translation_status": "translated",
+  "translation_note": null
+}
+```
+
+`translation_status` 取值：`translated`、`original_chinese`、`unavailable`、`not_requested`。模型不可用时保留英文并标记 `unavailable`，不伪造翻译。报告生成和对话上下文优先使用中文短摘要，降低 token 消耗。

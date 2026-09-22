@@ -29,9 +29,14 @@ class ResearchRequest(BaseModel):
 class Paper(BaseModel):
     id: str                      # P1 / P2 ... 报告里靠它回指来源
     title: str
+    title_zh: str | None = None
     authors: list[str] = []
     year: int | None = None
     abstract: str | None = None
+    abstract_zh: str | None = None
+    abstract_summary_zh: str | None = None
+    translation_status: str | None = None
+    translation_note: str | None = None
     url: str | None = None
     source: str | None = None    # arXiv / Semantic Scholar / Crossref / MCP / mock
 

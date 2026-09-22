@@ -15,6 +15,7 @@ from typing import Any
 
 from .cache import get_cache
 from .config import Settings
+from .engines.paper_enrichment import enrich_papers
 from .llm.report import ReportError, build_report
 from .llm.translate import resolve as resolve_keyword
 from .logging_setup import get_logger
@@ -28,7 +29,11 @@ log = get_logger("pipeline")
 
 def run_research(keyword: str, limit: int, cfg: Settings) -> dict[str, Any]:
     cache = get_cache()
-    cache_key = cache.make_key(keyword, limit)
+    cache_variant = "|".join([
+        cfg.paper_source or "auto", cfg.llm_provider, cfg.llm_model,
+        str(cfg.abstract_translation_enabled), "pipeline-v4",
+    ])
+    cache_key = cache.make_key(keyword, limit, cache_variant)
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -65,6 +70,10 @@ def _run_research(keyword: str, limit: int, cfg: Settings) -> dict[str, Any]:
     papers, warnings = search_papers(search_keyword, limit, cfg)
     if translate_note:
         warnings.append(translate_note)
+
+    if papers:
+        papers, translation_warnings = enrich_papers(papers, cfg)
+        warnings.extend(translation_warnings)
 
     if not papers:
         log.info("检索无结果 keyword=%r 检索词=%r", keyword, search_keyword)

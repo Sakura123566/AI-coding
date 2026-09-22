@@ -315,9 +315,15 @@ onMounted(async () => {
             <h3 class="paper-list-title">论文证据 · {{ currentPapers.length }} 篇</h3>
             <article v-for="paper in currentPapers" :key="paper.id" class="paper-card">
               <div class="paper-heading"><span class="paper-id">{{ paper.id }}</span><button class="icon-button" type="button" :aria-label="favoriteIds.includes(paper.id) ? '取消收藏' : '收藏'" @click="toggleFavorite(paper)">{{ favoriteIds.includes(paper.id) ? "★" : "☆" }}</button></div>
-              <h3><a v-if="paper.url" :href="paper.url" target="_blank" rel="noopener noreferrer">{{ paper.title }}</a><span v-else>{{ paper.title }}</span></h3>
+              <h3><a v-if="paper.url" :href="paper.url" target="_blank" rel="noopener noreferrer">{{ paper.title_zh || paper.title }}</a><span v-else>{{ paper.title_zh || paper.title }}</span></h3>
+              <small v-if="paper.title_zh" class="paper-original-title">{{ paper.title }}</small>
               <p class="paper-meta">{{ paper.year || "年份未知" }} · {{ paper.source || "来源未知" }}</p>
-              <p class="paper-abstract">{{ paper.abstract || "暂无摘要" }}</p>
+              <p class="paper-abstract">{{ paper.abstract_summary_zh || paper.abstract_zh || (paper.translation_status === "unavailable" ? "暂无中文摘要，可在原文中查看详细信息。" : "暂无摘要") }}</p>
+              <details v-if="paper.abstract_zh || paper.abstract" class="paper-originals">
+                <summary>查看完整摘要和英文原文</summary>
+                <p v-if="paper.abstract_zh"><strong>中文翻译：</strong>{{ paper.abstract_zh }}</p>
+                <p v-if="paper.abstract" lang="en"><strong>Original：</strong>{{ paper.abstract }}</p>
+              </details>
             </article>
           </template>
         </aside>
@@ -332,7 +338,7 @@ onMounted(async () => {
       <section v-else-if="activeView === 'library'" class="page-view">
         <div class="page-heading"><div><span class="eyebrow">Local favorites</span><h2>我的资料库</h2></div><span class="count-badge">{{ favorites.length }} 篇本机收藏</span></div>
         <div v-if="!favorites.length" class="empty-panel"><h3>还没有收藏</h3><p>在论文卡片上点击星标后，会保存在当前浏览器。</p></div>
-        <div class="library-grid"><article v-for="paper in favorites" :key="paper.id" class="paper-card"><div class="paper-heading"><span class="paper-id">{{ paper.id }}</span><button class="icon-button" type="button" aria-label="取消收藏" @click="toggleFavorite(paper)">★</button></div><h3><a v-if="paper.url" :href="paper.url" target="_blank" rel="noopener noreferrer">{{ paper.title }}</a><span v-else>{{ paper.title }}</span></h3><p class="paper-meta">{{ paper.year || "年份未知" }} · {{ paper.source || "来源未知" }}</p></article></div>
+        <div class="library-grid"><article v-for="paper in favorites" :key="paper.id" class="paper-card"><div class="paper-heading"><span class="paper-id">{{ paper.id }}</span><button class="icon-button" type="button" aria-label="取消收藏" @click="toggleFavorite(paper)">★</button></div><h3><a v-if="paper.url" :href="paper.url" target="_blank" rel="noopener noreferrer">{{ paper.title_zh || paper.title }}</a><span v-else>{{ paper.title_zh || paper.title }}</span></h3><small v-if="paper.title_zh" class="paper-original-title">{{ paper.title }}</small><p class="paper-meta">{{ paper.year || "年份未知" }} · {{ paper.source || "来源未知" }}</p><p class="paper-abstract">{{ paper.abstract_summary_zh || paper.abstract_zh || "暂无中文摘要" }}</p></article></div>
       </section>
 
       <section v-else-if="activeView === 'profile'" class="page-view">
