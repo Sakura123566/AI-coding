@@ -1,0 +1,81 @@
+{
+  "status": "success",
+  "user_id": 1,
+  "scope": "user",
+  "count": 4,
+  "keywords": [
+    {
+      "term": "graph neural network",
+      "display": "图神经网络",
+      "weight": 0.94,
+      "category": "method",
+      "times": 3,
+      "first_seen": "2026-09-21T17:19:06Z",
+      "last_seen": "2026-09-21T17:19:06Z",
+      "sources": [
+        {
+          "type": "chat",
+          "id": "m1"
+        },
+        {
+          "type": "search",
+          "id": "s1"
+        },
+        {
+          "type": "chat",
+          "id": "m3"
+        }
+      ]
+    },
+    {
+      "term": "recommender system",
+      "display": "推荐系统",
+      "weight": 0.847,
+      "category": "domain",
+      "times": 2,
+      "first_seen": "2026-09-21T17:19:06Z",
+      "last_seen": "2026-09-21T17:19:06Z",
+      "sources": [
+        {
+          "type": "chat",
+          "id": "m1"
+        },
+        {
+          "type": "chat",
+          "id": "m5"
+        }
+      ]
+    },
+    {
+      "term": "knowledge graph",
+      "display": "知识图谱",
+      "weight": 0.715,
+      "category": "method",
+      "times": 1,
+      "first_seen": "2026-09-21T17:19:06Z",
+      "last_seen": "2026-09-21T17:19:06Z",
+      "sources": [
+        {
+          "type": "chat",
+          "id": "m5"
+        }
+      ]
+    },
+    {
+      "term": "神经网络",
+      "display": "神经网络",
+      "weight": 0.715,
+      "category": "method",
+      "times": 1,
+      "first_seen": "2026-09-21T17:19:06Z",
+      "last_seen": "2026-09-21T17:19:06Z",
+      "sources": [
+        {
+          "type": "chat",
+          "id": "m1"
+        }
+      ]
+    }
+  ],
+  "generated_at": "2026-09-21T17:19:06Z"
+}

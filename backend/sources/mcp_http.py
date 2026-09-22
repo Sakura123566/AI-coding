@@ -21,6 +21,21 @@ from .mcp_common import McpError, build_arguments, papers_from_result, pick_tool
 
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 
+# 正在进行中的 SSE 客户端：外层超时后关闭事件流，让读流线程能退出
+_ACTIVE: set["McpSse"] = set()
+_ACTIVE_LOCK = threading.Lock()
+
+
+def abort_active() -> None:
+    """关闭所有仍在等待的 SSE 事件流（超时兜底用）。"""
+    with _ACTIVE_LOCK:
+        clients = list(_ACTIVE)
+    for client in clients:
+        try:
+            client.abort()
+        except Exception:  # noqa: BLE001
+            pass
+
 
 def _headers(extra: dict[str, str] | None, session: str | None = None) -> dict[str, str]:
     headers = {
@@ -145,6 +160,16 @@ class McpSse:
         threading.Thread(target=self._reader, daemon=True).start()
         if not self._ready.wait(self.timeout):
             raise McpError("SSE 端点已连接，但一直没下发消息端点（endpoint 事件）")
+        with _ACTIVE_LOCK:
+            _ACTIVE.add(self)
+
+    def abort(self) -> None:
+        """关闭事件流：阻塞在 `for raw in self.resp` 的读线程会因此退出。"""
+        if self.resp is not None:
+            try:
+                self.resp.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     def _reader(self) -> None:
         event, data_lines = None, []
@@ -195,6 +220,8 @@ class McpSse:
             pass
 
     def close(self) -> None:
+        with _ACTIVE_LOCK:
+            _ACTIVE.discard(self)
         if self.resp:
             try:
                 self.resp.close()

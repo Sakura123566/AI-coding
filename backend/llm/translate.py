@@ -100,11 +100,17 @@ def via_model(keyword: str, cfg: Any) -> str | None:
 
 
 def resolve(keyword: str, cfg: Any) -> tuple[str, str | None]:
-    """返回 (实际用于检索的关键词, 翻译说明)。没翻译就返回原词和 None。"""
-    if not has_cjk(keyword):
-        return keyword, None
+    """返回 (实际用于检索的关键词, 翻译/扩展说明)。没变化就返回原词和 None。"""
+    raw = (keyword or "").strip()
+    mapped_exact = KEYWORD_MAP.get(raw.lower())
+    if mapped_exact:
+        note = _note(raw, mapped_exact) if has_cjk(raw) else _expansion_note(raw, mapped_exact)
+        return mapped_exact, note
 
-    term, mapped = match_map(keyword)
+    if not has_cjk(raw):
+        return raw, None
+
+    term, mapped = match_map(raw)
     # 命中词之外还有较多内容（如"联邦学习在医疗影像中的应用"），
     # 说明用户加了限定条件，交给模型整句翻译更贴合原意；映射表只作兜底
     extra = len(keyword.strip()) - len(term or "")
@@ -121,3 +127,7 @@ def resolve(keyword: str, cfg: Any) -> tuple[str, str | None]:
 
 def _note(keyword: str, translated: str) -> str:
     return f"中文主题已转为英文检索：{keyword} → {translated}"
+
+
+def _expansion_note(keyword: str, expanded: str) -> str:
+    return f"检索缩写已扩展：{keyword} → {expanded}"

@@ -8,9 +8,25 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import threading
 from typing import Any
 
 from .mcp_common import McpError, build_arguments, papers_from_result, pick_tool
+
+# 正在进行中的客户端：外层超时后会遍历它们，掐断子进程让读管道的线程能退出
+_ACTIVE: set["McpStdioClient"] = set()
+_ACTIVE_LOCK = threading.Lock()
+
+
+def abort_active() -> None:
+    """掐断所有仍在等待的 stdio 子进程（超时兜底用）。"""
+    with _ACTIVE_LOCK:
+        clients = list(_ACTIVE)
+    for client in clients:
+        try:
+            client.abort()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class McpStdioClient:
@@ -39,6 +55,16 @@ class McpStdioClient:
             self.proc = subprocess.Popen(self.command, **kwargs)
         except FileNotFoundError as e:
             raise McpError(f"无法启动 MCP 命令：{self.command[0]}({e})") from e
+        with _ACTIVE_LOCK:
+            _ACTIVE.add(self)
+
+    def abort(self) -> None:
+        """强杀子进程：管道断了，阻塞在 readline 上的线程立刻会拿到 EOF 并退出。"""
+        if self.proc is not None and self.proc.poll() is None:
+            try:
+                self.proc.kill()
+            except Exception:  # noqa: BLE001 - 进程可能刚好已经退出
+                pass
 
     def _send(self, payload: dict[str, Any]) -> None:
         assert self.proc and self.proc.stdin
@@ -71,6 +97,8 @@ class McpStdioClient:
         self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
 
     def close(self) -> None:
+        with _ACTIVE_LOCK:
+            _ACTIVE.discard(self)
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
             try:

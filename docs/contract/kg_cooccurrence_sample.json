@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "user_id": 1,
+  "count": 4,
+  "pairs": [
+    {
+      "source": "graph neural network",
+      "target": "recommender system",
+      "weight": 1
+    },
+    {
+      "source": "graph neural network",
+      "target": "神经网络",
+      "weight": 1
+    },
+    {
+      "source": "knowledge graph",
+      "target": "recommender system",
+      "weight": 1
+    },
+    {
+      "source": "recommender system",
+      "target": "神经网络",
+      "weight": 1
+    }
+  ]
+}

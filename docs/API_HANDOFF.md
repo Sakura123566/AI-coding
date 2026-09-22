@@ -10,7 +10,22 @@
 | 主接口 | POST | `/api/research/run` |
 
 后端默认地址：`http://127.0.0.1:8000`
-Swagger 自测页：`http://127.0.0.1:8000/docs`
+Swagger 自测页：`http://127.0.0.1:8000/docs`（浏览器直接打开就能发请求，不用装 Postman）
+
+### 1.1 前端该填哪个后端地址（按你的部署场景选）
+
+| 场景 | 前端填什么 | 能不能用 |
+|---|---|---|
+| 前端跑在**本机** `npm run dev`（Vite） | `/api`（配 Vite proxy 转发到 8000），或直接 `http://127.0.0.1:8000` | ✅ 推荐开发期 |
+| 前端**已部署到云端**（如 `https://xxx.app.workbuddy.host`），后端在本机 | `http://127.0.0.1:8000` | ✅ 能用，但**只有后端那台电脑的浏览器打开才行** |
+| 想让**任何人的电脑/手机**都能打开前端并用 | 后端必须是公网 HTTPS 地址 | 需要后端一起部署上线 |
+
+跨域（CORS）不用你操心：后端已放行任意来源，实测带 `Origin` 请求会返回
+`access-control-allow-origin: *`，OPTIONS 预检也是 200。
+HTTPS 页面请求 `http://127.0.0.1` 不会被浏览器拦——`127.0.0.1` 在浏览器规范里算可信来源，
+Chrome / Edge / Firefox 都放行（Safari 个别版本可能拦，遇到再说）。
+
+> 改完地址记得**重新 build 再发布**，只改代码不重新部署是不生效的。
 
 ## 2. 请求字段
 
@@ -63,7 +78,7 @@ Swagger 自测页：`http://127.0.0.1:8000/docs`
 | `report.reading_path[].reason` | `""` | 省略原因行 |
 | 整个 `report` | `null` | 看 `report_error` |
 
-**新增可选字段 `resolved_keyword`**（2026-09-21 加，前端可忽略）：
+**新增可选字段 `resolved_keyword`**（2026-09-22 更新，前端应显示）：
 用户输入中文主题时，后端会先转成英文再去检索（arXiv 不吃中文查询），
 `keyword` 仍是用户原样输入，`resolved_keyword` 是实际检索用的英文词；
 英文输入时为 `null`。同时 `warnings` 里会有一条"中文主题已转为英文检索：X → Y"。
@@ -80,18 +95,30 @@ Swagger 自测页：`http://127.0.0.1:8000/docs`
 | `EMPTY_KEYWORD` | 400 | 输入框提示 "请输入研究主题" |
 | `INVALID_KEYWORD` | 400 | 提示主题过长 |
 | `INVALID_REQUEST` | 400 | 提示参数错误 |
-| `MCP_TIMEOUT` | 200 | "检索服务超时，请重试" + 重试按钮 |
-| `MCP_ERROR` | 200 | "检索服务暂不可用，请重试" + 重试按钮 |
+| `MCP_TIMEOUT` | 504 | "检索服务超时，请重试" + 重试按钮 |
+| `MCP_ERROR` | 502 | "检索服务暂不可用，请重试" + 重试按钮 |
 | `LLM_ERROR` | 200 | 论文照常展示，报告区提示 `report_error` |
 | `INTERNAL_ERROR` | 500 | "服务内部错误，请重试" |
 
-> 注意：上游失败用 **HTTP 200 + body 里 status=error**。前端请**先判断 `body.status`，再看 HTTP 状态码**，否则 axios 会把 200 当成成功。
+> **判据（2026-09-21 更新，重要）**：上游失败不再用 HTTP 200。
+> 之前 MCP 超时也返回 200，前端用 `if (!res.ok) throw` 这类写法会走进成功分支、`papers` 变 undefined 直接白屏。
+> 现在：**4xx = 你的请求有问题（别重试同样的输入），5xx = 后端/上游有问题（可以重试）**。
+> 无论哪种，失败响应体里 `status` 一定是 `"error"`，`error_code` 决定文案，**请以 `body.status` 为第一判据**。
+>
+> `LLM_ERROR` 仍是 200 —— 那种情况论文是真实的、只是报告没生成出来，属于"部分成功"，不是失败。
+
+**每个响应都带 `X-Request-ID` 响应头**。后端日志里也有同一个 ID。
+联调时如果后端返回 500，把这个 ID 发给队员1，能直接定位到那一次请求的堆栈。
 
 ## 5. 三种"看起来像失败但其实不是"的情况
 
 1. **无结果**：`status=success`、`count=0`、`papers=[]`、`report=null`、`message="没有找到论文…"` → 走"无结果"状态页。
 2. **报告降级**：`status=success`、有 `papers`、但 `report=null` 且 `report_error` 有值 → 论文照常展示，报告区显示 `report_error`。
 3. **本地样例模式**：`warnings` 里带 "本地样例报告（LLM_PROVIDER=mock）" → 说明后端还没接真模型，演示前必须切回真实模型。
+4. **秒回（命中缓存）**：同一个 `keyword + limit` 在 10 分钟内重复请求，后端直接返回上次结果，
+   响应体结构完全一样，前端不用特殊处理。演示时这是好事——同一主题点第二次不用干等；
+   只有"有论文且报告成功"的结果才进缓存，出错的请求刷新一次就会真的重试。
+   想关掉：`.env` 里 `CACHE_ENABLED=false`。
 
 ## 6. 跨域（CORS）
 

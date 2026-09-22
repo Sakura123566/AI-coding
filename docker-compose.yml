@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: .
+    container_name: research-navigator-backend
+    env_file:
+      - .env
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      HOST: 0.0.0.0
+      PORT: 8000
+      DB_PATH: /app/backend/data/app.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - navigator-data:/app/backend/data
+    restart: unless-stopped
+
+volumes:
+  navigator-data:

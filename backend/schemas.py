@@ -15,6 +15,9 @@ MAX_KEYWORD_LEN = 200
 class ResearchRequest(BaseModel):
     keyword: str = Field(..., description="研究主题，中英文均可")
     limit: int = Field(10, ge=1, le=30, description="返回论文篇数")
+    # 可选：登录用户在对话里触发检索时带上会话号，检索记录就能关联到那次对话。
+    # 老前端不带它，行为与之前完全一致。
+    session_id: str | None = Field(None, max_length=64, description="可选的会话 ID")
 
     @field_validator("keyword")
     @classmethod

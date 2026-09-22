@@ -2,25 +2,73 @@
 from __future__ import annotations
 
 import sys
-from concurrent.futures import ThreadPoolExecutor
+import threading
 from typing import Any, Callable
 
 from ..config import Settings
-from . import arxiv, crossref, mock, mcp_http, mcp_stdio, mcp_ws, semanticscholar
+from ..logging_setup import get_logger
+from . import arxiv, crossref, mock, mcp_http, mcp_stdio, mcp_ws, openalex, semanticscholar
+
+log = get_logger("sources")
 
 # 名称 → (执行函数, 展示名)
 REGISTRY: dict[str, tuple[Callable[..., list[dict]], str]] = {
     "arxiv": (arxiv.search, "arXiv"),
+    "openalex": (openalex.search, "OpenAlex"),
     "semanticscholar": (semanticscholar.search, "Semantic Scholar"),
     "crossref": (crossref.search, "Crossref"),
     "mock": (mock.search, "mock"),
 }
 
 
-def _run_with_timeout(fn: Callable[[], list[dict]], timeout: int) -> list[dict]:
-    """给可能卡住的调用（尤其是 MCP 子进程）套一层硬超时。"""
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(fn).result(timeout=timeout)
+def _run_with_timeout(fn: Callable[[], list[dict]], timeout: int,
+                      cancel: Callable[[], None] | None = None) -> list[dict]:
+    """给可能卡住的调用（尤其是 MCP 子进程）套一层硬超时。
+
+    为什么不用 ThreadPoolExecutor：它的 `with` 退出会 `shutdown(wait=True)`，
+    超时后主线程仍被阻塞等线程结束，"超时"就只是自己先抛错、接口照样挂着。
+    这里改用 daemon 线程 + 超时后主动掐断上游（cancel），让线程真能退出。
+    """
+    box: dict[str, Any] = {}
+
+    def runner() -> None:
+        try:
+            box["value"] = fn()
+        except BaseException as exc:  # noqa: BLE001 - 原样带回主线程重抛
+            box["error"] = exc
+
+    worker = threading.Thread(target=runner, daemon=True, name="source-call")
+    worker.start()
+    worker.join(timeout)
+
+    if worker.is_alive():
+        if cancel is not None:
+            try:
+                cancel()
+            except Exception:  # noqa: BLE001 - 清理失败不能盖掉超时本身
+                log.warning("超时后清理上游连接失败")
+        worker.join(5)  # 给被掐断的线程一点收尾时间，之后就不管它了
+        raise TimeoutError(f"检索超时（>{timeout}s）")
+
+    if "error" in box:
+        raise box["error"]
+    return box.get("value") or []
+
+
+def _abort_mcp() -> None:
+    """超时后掐断所有还在进行的 MCP 连接。
+
+    MCP 三种传输里都有会永久阻塞的读操作（子进程的 readline、SSE 事件流、WebSocket recv），
+    不掐断的话工作线程永远不会自己退出，接口就会一直转圈。
+    """
+    for mod in (mcp_stdio, mcp_http, mcp_ws):
+        abort = getattr(mod, "abort_active", None)
+        if abort is None:
+            continue
+        try:
+            abort()
+        except Exception:  # noqa: BLE001
+            log.warning("中止 %s 连接时出错", mod.__name__)
 
 
 def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[str, Any]], list[str]]:
@@ -34,7 +82,7 @@ def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[st
     if cfg.paper_source == "mcp":
         try:
             papers = _run_with_timeout(
-                lambda: mcp_search(keyword, limit, cfg), cfg.mcp_timeout + 5
+                lambda: mcp_search(keyword, limit, cfg), cfg.mcp_timeout + 5, cancel=_abort_mcp
             )
             return papers, warnings
         except Exception as e:  # noqa: BLE001 - 上游异常一律转成可读告警
@@ -55,10 +103,12 @@ def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[st
         if name == "mcp":
             label = "MCP"
             try:
-                papers = _run_with_timeout(lambda: mcp_search(keyword, limit, cfg), cfg.mcp_timeout + 5)
+                papers = _run_with_timeout(lambda: mcp_search(keyword, limit, cfg),
+                                           cfg.mcp_timeout + 5, cancel=_abort_mcp)
             except Exception as e:  # noqa: BLE001
                 last_error = e
                 warnings.append(f"来源 {label} 不可用：{e}")
+                log.warning("来源 %s 不可用，尝试下一个 keyword=%r 原因=%s", label, keyword, e)
                 continue
         else:
             fn, label = REGISTRY[name]
@@ -67,10 +117,13 @@ def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[st
             except Exception as e:  # noqa: BLE001
                 last_error = e
                 warnings.append(f"来源 {label} 不可用：{e}")
+                log.warning("来源 %s 不可用，尝试下一个 keyword=%r 原因=%s", label, keyword, e)
                 continue
         if papers:
+            log.info("来源 %s 返回 %s 篇 keyword=%r", label, len(papers), keyword)
             return papers, warnings
         warnings.append(f"来源 {label} 没有返回结果")
+        log.info("来源 %s 返回空 keyword=%r", label, keyword)
 
     # 全部失败：给出可读错误，不假装成功
     raise _as_upstream_error(last_error or RuntimeError("所有来源均无结果"), "论文检索")
@@ -112,4 +165,10 @@ def _as_upstream_error(error: Exception | None, label: str) -> Exception:
 
     text = str(error) or error.__class__.__name__
     code = "MCP_TIMEOUT" if ("超时" in text or "timeout" in text.lower()) else "MCP_ERROR"
-    return ResearchError(code, f"{label}服务暂时不可用（{text}），请稍后重试。")
+    # 上游故障是服务端问题，必须返回 5xx：
+    # 返回 200 的话，前端用 if (!res.ok) 判错会走进成功分支，papers 变成 undefined 直接白屏
+    http_status = 504 if code == "MCP_TIMEOUT" else 502
+    log.warning("检索失败 label=%s code=%s 原因=%s", label, code, text)
+    return ResearchError(
+        code, f"{label}服务暂时不可用（{text}），请稍后重试。", http_status=http_status
+    )
