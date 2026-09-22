@@ -1,0 +1,276 @@
+server:
+  tomcat:
+    tcp-nodelay: true
+spring:
+  threads:
+    virtual:
+      enabled: true
+  banner:
+    charset: UTF-8
+    location: classpath:banner.txt
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+  jpa:
+    show-sql: false
+    hibernate:
+      #更新或者创建数据库表结构(第一次启动请设置为update)
+      ddl-auto: update
+    properties:
+      hibernate:
+        connection:
+          characterEncoding: utf8mb4
+  influx:
+    user: cwl
+    # 你的数据库url
+    url: http://localhost:8086
+    password: 1234
+    mapper-location: top.rslly.iot.dao
+    dataBaseName: data
+    retention: autogen     #保存策略
+  datasource:
+    username: root
+    url: jdbc:mysql://localhost:3306/cwliot1.8?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 输入你自己的mysql密码,该密码为随机生成
+    password: "XzHvhX4CDaN696oQAXdmlcsrqgWbkxRl"
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      # 下面为连接池的补充设置，应用到上面所有数据源中
+      # 初始化大小，最小，最大
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      # 配置获取连接等待超时的时间
+      max-wait: 60000
+      # 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒
+      time-between-eviction-runs-millis: 60000
+      # 配置一个连接在池中最小生存的时间，单位是毫秒
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1 FROM DUAL
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      # 保持连接活跃，防止被MySQL服务端关闭
+      keep-alive: true
+      # 打开PSCache，并且指定每个连接上PSCache的大小
+      pool-prepared-statements: true
+      max-pool-prepared-statement-per-connection-size: 20
+      # 配置监控统计拦截的 Filter，去掉后监控界面 SQL 无法统计，wall 用于防火墙   日志 log4j
+      # filters: stat,wall,log4j   #导入了log4j
+      use-global-data-source-stat: true
+      # 通过connectProperties属性来打开mergeSql功能；慢SQL记录
+      connect-properties: druid.stat.mergeSql=true;druid.stat.slowSqlMillis=5000
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        reset-enable: false
+        login-username: admin
+        login-password: 123456
+  data:
+    redis:
+      host: localhost
+      password: 1234
+      port: 6379
+      timeout: 1000
+  mail:
+    host: smtp.126.com
+    port: 465
+    protocol: smtps
+    username: ruanzhen1234@126.com
+    password: XXX
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          ssl: true
+  thymeleaf:
+    cache: true
+    mode: html
+    prefix: classpath:/templates/
+    encoding: UTF-8
+    servlet:
+      content-type: text/html
+grpc:
+  server:
+    port: 9090
+mqtt:
+  Host: tcp://192.168.49.129:1883
+  username: hello
+  password: 1234
+wx:
+  debug: true # false即启动微信模块
+  unregistered-message: 该用户未注册，请先注册再使用
+  register:
+    trigger-keyword: 注册账户   # 触发注册的关键字
+    success-message: 注册成功   # 注册成功后的回复信息
+  appid: XXXXXX
+  appsecret: XXXXXX
+  templateUrl: XXXXX
+  alarmTemplateId: XXXXXX
+  base-url: https://api.weixin.qq.com
+  micro:
+    appid: XXXXXX
+    appsecret: XXXXXX
+    ToUserName: XXXXXX
+    appid2: XXXXXX
+    ToUserName2: XXXXXX
+    appsecret2: XXXXXX
+  msg:
+    token: XXXXXX
+storage:
+  database: influxdb
+js:
+  local:
+    use_js_sandbox: true
+    monitor_thread_pool_size: 4
+    max_cpu_time: 10000
+    max_black_list_duration_sec: 60
+    max_requests_timeout: 10
+    js_thread_pool_size: 16
+    max_prepare_Statement: 100
+ota:
+  bin:
+    path: D://temp-rainy//
+    url: http://127.0.0.1:8080/api/v2/micro/
+  xiaozhi:
+    url: ws://127.0.0.1:8080
+    version: 1.9.2
+    control-url: control.rslly.top
+rag:
+  embedding_modelName: bge-small-zh-v1.5-quantized
+  knowledge_chat_embeddingStore_url: http://localhost:8000
+weather:
+  # 高德天气配置
+  amap-key: XXX
+  # 和风天气配置 (使用JWT认证)
+  qweather:
+    enabled: true
+    # API Host: 免费订阅 api.qweather.com, 商业订阅 api.qweather.com
+    api-host: XXX
+    # 项目ID (sub)
+    project-id: XXX
+    # 凭据ID (kid)
+    key-id: XXX
+    # Ed25519私钥 (PKCS8格式，Base64编码，不含-----BEGIN PRIVATE KEY-----等标记)
+    private-key: XXX
+ai:
+  temperature: 0.6
+  top-p: 0.85
+  detectRandom: false
+  showThinking: false
+  classifier:
+    include:
+      thought: true
+  stream:
+    # /api/v2/aiControl/stream 最终发送给模型的最大字符数，包含用户输入和上传文件解析内容
+    max-input-chars: 60000
+  agent:
+    mode: function
+    showThinking: false
+    include-thought: false
+  vad:
+    timeout: 60
+    timeoutRealtime: 120
+  asr:
+    provider: funasr # dashscope 或 funasr
+    wx_smart_robot_asr: dashscope
+    dashscope-max-concurrent: 20
+    dashscope-acquire-timeout-ms: 30000
+  minimax:
+    api-key: XXX
+    group-id: XXX
+    tts:
+      enabled: true
+      # 模型选择: speech-02-hd(默认) / speech-2.8-hd / speech-2.8-turbo
+      # speech-2.8-hd 和 speech-2.8-turbo 支持语气词标签
+      model: speech-2.8-hd
+  funasr:
+    host: 192.168.49.129
+    port: 10095
+    api-key: none
+    is-ssl: false
+    delete-audio: true
+    output-dir: ./funasr_output/
+  tts:
+    skip-tool-prefix: true
+    # TTS缓存保留时间，单位是毫秒。默认是一天
+    cache-expire-time: 86400000
+    dashscope-max-concurrent: 64
+    dashscope-acquire-timeout-ms: 5000
+    dashscope-connection-pool-size: 128
+    dashscope-max-async-requests: 128
+    dashscope-max-async-requests-per-host: 128
+    dashscope-connect-timeout-seconds: 10
+    dashscope-write-timeout-seconds: 20
+    dashscope-read-timeout-seconds: 120
+  chromeDrive-path: XXX
+  chrome-path: XXX
+  audio-tmp-path: D://temp-music//
+  audio-temp-url: https://XXX.com
+  vision-explain-url: http://127.0.0.1:8080/api/v2/vision/explain
+  vision-model: silicon-Qwen/Qwen3-VL-8B-Instruct
+  glm-key: XXX
+  deepSeek-key: XXX
+  siliconFlow-Key: XXX
+  uniApi-Key: XXX
+  dashscope-key: XXX
+  robot-name: 小创
+  team-name: 创万联
+  custom-key: XXX
+  custom-llm-provider-url: XXX
+  agent-epoch-limit: 5
+  chatTool-llm: dashscope-qwen3-235b-a22b-instruct-2507
+  chatTool-speedUp: true
+  emotionTool-llm: dashscope-qwen3-14b
+  memoryTool-llm: dashscope-qwen3-32b
+  classifierTool-llm: dashscope-deepseek-v4-flash
+  classifierTool-speedUp: true
+  router:
+    mode: function
+  controlTool-llm: dashscope-qwen3-32b
+  controlTool-llm-speed: true
+  musicTool-llm: dashscope-qwen3-14b
+  # 本地音乐文件夹路径（用于小智设备播放音乐），留空则使用网易云
+  # 示例: D:/music/
+  music:
+    path: D:/music/
+  productRoleTool-llm: dashscope-qwen3-14b
+  weatherTool-llm: dashscope-qwen3-next-80b-a3b-instruct
+  weatherTool-speedUp: true
+  wxBoundProductTool-llm: dashscope-qwen3-14b
+  wxProductActiveTool-llm: dashscope-qwen3-14b
+  scheduleTool-llm: dashscope-qwen3-next-80b-a3b-instruct
+  scheduleTool-llm-speed: true
+  searchTool-llm: silicon-Qwen3-30B-A3B-think-64
+  agent-llm: dashscope-deepseek-v4-flash
+  agent-speedUp: true
+  longMemoryTool-llm: dashscope-qwen3-14b
+  wx_smart_robot_llm: glm
+  knowledge_graphic_llm: dashscope-deepseek-v4-flash
+  knowledge_graphic:
+    max_graphic_length: 256000
+    chunk_chars: 12000
+    chunk_overlap_chars: 500
+  branch-prediction:
+    enabled: true
+  mcp:
+    agent-mode: function
+    agent-llm: dashscope-deepseek-v4-flash
+    agent-speedUp: true
+    agent-epoch-limit: 5
+    agent-include-thought: false
+    endpoint-count: 5
+    # 每一个endpoint最多允许多少个工具
+    tools-limit: 50
+jwt:
+  # JWT 密钥
+  secret: tF6mG3dJ0uD5uL6yW2wH5mO2pA1oH9JWTTokenGenerationThatIsAtLeast32CharactersLong
+product-limit:
+  20
+emq:
+  api:
+    url: http://192.168.49.129:18083/api/v5/clients
+    key: XXX
+    secret: XXX
