@@ -20,6 +20,7 @@ from .auth import optional_user_id
 from .cache import configure as configure_cache
 from .config import settings
 from .db import init_db
+from .emotion.router import router as emotion_router
 from .engines.keyword_engine import extract_from_search
 from .errors import ApiError
 from .logging_setup import get_logger, request_id, setup_logging
@@ -72,7 +73,8 @@ app = FastAPI(
 )
 
 for _router in (auth_api.router, chat_api.router, memory_api.router,
-                profile_api.router, kg_api.router, agent_api.router, reports_api.router):
+                profile_api.router, kg_api.router, agent_api.router, reports_api.router,
+                emotion_router):
     app.include_router(_router)
 
 app.add_middleware(
