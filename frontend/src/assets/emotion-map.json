@@ -1,0 +1,16 @@
+{
+  "_说明": "情绪状态 -> 图片文件名。图片放前端 public/emojis/ 下，用 /emojis/xxx.webp 引用。协作状态原仓库没有对应图，借用 workflow_coding。",
+  "待机": "persona_idle.webp",
+  "待机疲惫": "persona_idle_tired.webp",
+  "开心": "persona_happy.webp",
+  "温柔安抚": "persona_comforting.webp",
+  "细心讲解": "persona_explain.webp",
+  "细心讲解2": "persona_deep_explain.webp",
+  "严肃讲解": "persona_serious_explain.webp",
+  "严肃指正": "persona_correction.webp",
+  "论文搜索": "workflow_searching.webp",
+  "阅读论文": "workflow_reading.webp",
+  "编写代码": "workflow_coding.webp",
+  "协作": "workflow_coding.webp",
+  "灵光一现": "workflow_eureka.webp"
+}

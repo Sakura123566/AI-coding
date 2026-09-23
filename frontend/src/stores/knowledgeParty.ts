@@ -107,6 +107,25 @@ function newId(): string {
     : 'sp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)
 }
 
+// 情绪模块联调用：每个浏览器一个稳定会话 id（持久化），后端据此推送情绪事件。
+// 后端队友联调时也可用 URL ?emotionSession= 直接覆盖。
+const EMOTION_SESSION_KEY = 'kp-emotion-session-id'
+function loadOrCreateEmotionSessionId(): string {
+  try {
+    const existing = localStorage.getItem(EMOTION_SESSION_KEY)
+    if (existing) return existing
+  } catch {
+    /* ignore */
+  }
+  const id = newId()
+  try {
+    localStorage.setItem(EMOTION_SESSION_KEY, id)
+  } catch {
+    /* ignore */
+  }
+  return id
+}
+
 export const useKpStore = defineStore('knowledgeParty', () => {
   const saved = loadState()
 
@@ -121,6 +140,8 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   // 检索结果（全应用共享，App / HistoryView 等均通过 store 读取同一份）
   const topic = ref('')
   const loading = ref(false)
+  // 情绪模块联调会话 id（稳定、持久化）
+  const emotionSessionId = ref<string>(loadOrCreateEmotionSessionId())
   // 加载状态机：'searching'（正在检索论文…）→ 'analyzing'（已找到，正在生成报告…）→ 终态由 loading 收尾
   const phase = ref<'idle' | 'searching' | 'analyzing'>('idle')
   const error = ref('')
@@ -294,6 +315,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     mode,
     topic,
     loading,
+    emotionSessionId,
     phase,
     error,
     retryableError,

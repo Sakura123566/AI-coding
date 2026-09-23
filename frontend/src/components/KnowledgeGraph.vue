@@ -1,178 +1,521 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { Paper, ResearchReport } from '../services/research'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as echarts from 'echarts'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  generateGraph,
+  parseArticle,
+  type GraphData,
+  type GraphNode,
+  type GraphNodeType
+} from '../services/knowledgeGraph'
 
-// 知识图谱（前端派生可视化）：后端不返回图结构，这里基于 report 的主题簇 + 论文
-// 拼一张轻量 SVG 图——中心「主题」节点连各「主题簇」节点，主题簇再连其「论文」节点。
-// 真正的语义图谱/embedding 属后端职责，前端只做呈现。
-const props = defineProps<{
-  topic?: string
-  report: ResearchReport | null
-  papers?: Paper[]
-}>()
+const props = withDefaults(defineProps<{ keyword?: string }>(), { keyword: '知识图谱' })
 
-interface GNode {
-  id: string
-  label: string
-  type: 'topic' | 'theme' | 'paper'
-  x: number
-  y: number
-}
-interface GEdge {
-  from: string
-  to: string
-}
+const keyword = ref(props.keyword || '知识图谱')
+const loading = ref(false)
+const graphData = ref<GraphData | null>(null)
+const searchText = ref('')
+const locked = ref(false)
 
-const PAPER_CAP = 6
-const WIDTH = 760
+const hoverId = ref<string | null>(null)
+const selectedId = ref<string | null>(null)
+const dialogVisible = ref(false)
 
-const graph = computed<{ nodes: GNode[]; edges: GEdge[]; width: number; height: number }>(() => {
-  const papers = props.papers ?? []
-  const byId = new Map(papers.map((p) => [p.id, p]))
-  const nodes: GNode[] = []
-  const edges: GEdge[] = []
+const chartEl = ref<HTMLDivElement | null>(null)
+let chart: echarts.ECharts | null = null
 
-  const topicId = 'topic'
-  nodes.push({ id: topicId, label: props.topic || '主题', type: 'topic', x: WIDTH / 2, y: 46 })
-
-  const themes = props.report?.themes ?? []
-  const themeY = 140
-
-  if (!themes.length) {
-    // 没有主题簇：把论文直接挂在主题节点下
-    const shown = papers.slice(0, PAPER_CAP)
-    const step = Math.min(96, (WIDTH - 80) / Math.max(1, shown.length))
-    shown.forEach((p, i) => {
-      const id = 'p-' + p.id
-      nodes.push({
-        id,
-        label: p.title,
-        type: 'paper',
-        x: WIDTH / 2 + (i - (shown.length - 1) / 2) * step,
-        y: 200
-      })
-      edges.push({ from: topicId, to: id })
-    })
-    return { nodes, edges, width: WIDTH, height: 260 }
+// —— 径向/同心环布局（对齐 29f5 的 radialTree 观感）——
+function computeLayout(data: GraphData, W: number, H: number): Map<string, { x: number; y: number }> {
+  const { nodes, edges } = data
+  const adj = new Map<string, Set<string>>()
+  nodes.forEach((n) => adj.set(n.id, new Set()))
+  edges.forEach((e) => {
+    if (adj.has(e.from) && adj.has(e.to)) {
+      adj.get(e.from)!.add(e.to)
+      adj.get(e.to)!.add(e.from)
+    }
+  })
+  const center = nodes.find((n) => n.isCenter) ?? nodes[0]
+  const layer = new Map<string, number>()
+  const queue: string[] = []
+  if (center) {
+    layer.set(center.id, 0)
+    queue.push(center.id)
   }
-
-  const colW = WIDTH / themes.length
-  const paperStep = Math.min(88, (colW - 48) / PAPER_CAP)
-  themes.forEach((t, i) => {
-    const tx = colW * (i + 0.5)
-    const tid = 't-' + i
-    nodes.push({ id: tid, label: t.name, type: 'theme', x: tx, y: themeY })
-    edges.push({ from: topicId, to: tid })
-
-    const linked = (t.paper_ids ?? [])
-      .map((id) => byId.get(id))
-      .filter((p): p is Paper => !!p)
-      .slice(0, PAPER_CAP)
-    const n = linked.length
-    linked.forEach((p, j) => {
-      const id = 'p-' + p.id + '-' + i
-      nodes.push({
-        id,
-        label: p.title,
-        type: 'paper',
-        x: tx + (j - (n - 1) / 2) * paperStep,
-        y: themeY + 96
-      })
-      edges.push({ from: tid, to: id })
-    })
+  while (queue.length) {
+    const id = queue.shift() as string
+    const l = layer.get(id) as number
+    for (const nb of adj.get(id) as Set<string>) {
+      if (!layer.has(nb)) {
+        layer.set(nb, l + 1)
+        queue.push(nb)
+      }
+    }
+  }
+  const maxLayer = Math.max(0, ...Array.from(layer.values()))
+  nodes.forEach((n) => {
+    if (!layer.has(n.id)) layer.set(n.id, maxLayer + 1)
   })
 
-  return { nodes, edges, width: WIDTH, height: themeY + 150 }
+  const pos = new Map<string, { x: number; y: number }>()
+  const cx = W / 2
+  const cy = H / 2
+  const byLayer = new Map<number, string[]>()
+  layer.forEach((l, id) => {
+    if (!byLayer.has(l)) byLayer.set(l, [])
+    byLayer.get(l)!.push(id)
+  })
+  const ringGap = Math.min(W, H) * 0.15
+  byLayer.forEach((ids, l) => {
+    const r = l * ringGap
+    ids.forEach((id, i) => {
+      const a = -Math.PI / 2 + (i / ids.length) * 2 * Math.PI
+      pos.set(id, { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) })
+    })
+  })
+  return pos
+}
+
+const TYPE_COLORS: Record<GraphNodeType, string> = {
+  concept: '#2b6cff',
+  paper: '#7c6bff',
+  method: '#19b37d',
+  dataset: '#f59e0b',
+  application: '#ef5da8'
+}
+const TYPE_LABELS: Record<GraphNodeType, string> = {
+  concept: '概念',
+  paper: '论文',
+  method: '方法',
+  dataset: '数据集',
+  application: '应用'
+}
+const legendItems = computed(() =>
+  (Object.keys(TYPE_COLORS) as GraphNodeType[]).map((t) => ({
+    type: t,
+    color: TYPE_COLORS[t],
+    label: TYPE_LABELS[t]
+  }))
+)
+const categories = computed(() =>
+  (Object.keys(TYPE_COLORS) as GraphNodeType[]).map((t) => ({
+    name: TYPE_LABELS[t],
+    itemStyle: { color: TYPE_COLORS[t] }
+  }))
+)
+
+function radiusOf(n: GraphNode): number {
+  return n.importance === 3 ? 44 : n.importance === 2 ? 30 : 20
+}
+
+function buildOption(): echarts.EChartsOption {
+  const data = graphData.value
+  if (!data || !chart) return {}
+  const W = chart.getWidth() || 960
+  const H = chart.getHeight() || 620
+  const pos = computeLayout(data, W, H)
+  const typeKeys = Object.keys(TYPE_COLORS) as GraphNodeType[]
+  const nodeList = data.nodes.map((n) => {
+    const match = !!searchText.value && locked.value && n.label.includes(searchText.value)
+    const dim = !!searchText.value && locked.value && !match
+    return {
+      id: n.id,
+      name: n.id,
+      category: typeKeys.indexOf(n.type),
+      symbolSize: radiusOf(n),
+      x: pos.get(n.id)!.x,
+      y: pos.get(n.id)!.y,
+      itemStyle: {
+        opacity: dim ? 0.18 : 1,
+        borderColor: '#fff',
+        borderWidth: 2,
+        shadowBlur: 9,
+        shadowColor: 'rgba(40,70,150,.18)'
+      },
+      label: {
+        show: n.importance >= 2,
+        formatter: () => n.label,
+        color: '#414c60',
+        fontSize: n.importance >= 2 ? 12 : 11,
+        textBorderColor: '#fff',
+        textBorderWidth: 3
+      },
+      _node: n
+    }
+  })
+  const linkList = data.edges.map((e) => ({
+    source: e.from,
+    target: e.to,
+    label: { show: false },
+    lineStyle: { color: '#a9bcd8', width: 1.2, opacity: 0.55, curveness: 0.05 }
+  }))
+  return {
+    tooltip: {
+      show: true,
+      formatter: (p: any) =>
+        p.dataType === 'node'
+          ? `<b>${p.data._node.label}</b><br/>${TYPE_LABELS[p.data._node.type as GraphNodeType]} · 重要度 ${'★'.repeat(
+              p.data._node.importance
+            )}${p.data._node.year ? ' · ' + p.data._node.year : ''}<br/>${p.data._node.desc || ''}`
+          : ''
+    },
+    series: [
+      {
+        type: 'graph',
+        layout: 'none',
+        roam: true,
+        draggable: false,
+        data: nodeList,
+        links: linkList,
+        categories: categories.value,
+        emphasis: {
+          focus: 'adjacency',
+          scale: 1.08,
+          label: { show: true }
+        },
+        left: '3%',
+        right: '3%',
+        top: '5%',
+        bottom: '5%'
+      }
+    ]
+  }
+}
+
+function renderChart() {
+  if (!chart) return
+  chart.setOption(buildOption(), true)
+}
+
+function openNode(id: string) {
+  selectedId.value = id
+  dialogVisible.value = true
+}
+
+const selectedNode = computed(() => {
+  const data = graphData.value
+  if (!data || !selectedId.value) return null
+  return data.nodes.find((n) => n.id === selectedId.value) ?? null
+})
+const relatedNodes = computed(() => {
+  const data = graphData.value
+  if (!data || !selectedId.value) return []
+  const out: { node: GraphNode; relation?: string; dir: 'out' | 'in' }[] = []
+  data.edges.forEach((e) => {
+    if (e.from === selectedId.value) {
+      const n = data.nodes.find((x) => x.id === e.to)
+      if (n) out.push({ node: n, relation: e.relation, dir: 'out' })
+    } else if (e.to === selectedId.value) {
+      const n = data.nodes.find((x) => x.id === e.from)
+      if (n) out.push({ node: n, relation: e.relation, dir: 'in' })
+    }
+  })
+  return out
 })
 
-function truncate(s: string, n = 12): string {
-  return s.length > n ? s.slice(0, n) + '…' : s
+async function generate() {
+  const kw = keyword.value.trim()
+  if (!kw) {
+    ElMessage.warning('请输入关键词')
+    return
+  }
+  loading.value = true
+  try {
+    graphData.value = await generateGraph(kw, { tone: 'professional', sentences: 2 })
+    renderChart()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '生成失败')
+  } finally {
+    loading.value = false
+  }
 }
+
+async function parseText() {
+  try {
+    const { value } = await ElMessageBox.prompt('粘贴一段文章，自动抽取实体关系生成知识图谱', '解析文章', {
+      inputType: 'textarea',
+      inputPlaceholder: '在此粘贴文本…',
+      confirmButtonText: '解析',
+      cancelButtonText: '取消'
+    })
+    if (!value) return
+    loading.value = true
+    graphData.value = await parseArticle(value, { tone: 'professional', sentences: 2 })
+    renderChart()
+  } catch {
+    /* 取消 */
+  } finally {
+    loading.value = false
+  }
+}
+
+function toggleLock() {
+  locked.value = !locked.value
+  if (!locked.value) searchText.value = ''
+  renderChart()
+}
+
+function resetView() {
+  chart?.dispatchAction({ type: 'restore' })
+  renderChart()
+}
+
+function onResize() {
+  chart?.resize()
+}
+
+onMounted(() => {
+  if (chartEl.value) {
+    chart = echarts.init(chartEl.value)
+    chart.on('click', (p: any) => {
+      if (p.dataType === 'node') openNode(p.name)
+    })
+    chart.on('mouseover', (p: any) => {
+      if (p.dataType === 'node') hoverId.value = p.name
+    })
+    chart.on('mouseout', () => {
+      hoverId.value = null
+    })
+    window.addEventListener('resize', onResize)
+    generate()
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+  chart?.dispose()
+  chart = null
+})
+
+watch(
+  () => props.keyword,
+  (k) => {
+    if (k) {
+      keyword.value = k
+      generate()
+    }
+  }
+)
+watch(searchText, renderChart)
 </script>
 
 <template>
-  <div class="kg">
-    <div v-if="!graph.nodes.length" class="kg-empty">检索后这里会生成知识图谱</div>
-    <svg
-      v-else
-      class="kg-svg"
-      :viewBox="`0 0 ${graph.width} ${graph.height}`"
-      preserveAspectRatio="xMidYMin meet"
-    >
-      <line
-        v-for="(e, i) in graph.edges"
-        :key="'e' + i"
-        :x1="graph.nodes.find((n) => n.id === e.from)!.x"
-        :y1="graph.nodes.find((n) => n.id === e.from)!.y"
-        :x2="graph.nodes.find((n) => n.id === e.to)!.x"
-        :y2="graph.nodes.find((n) => n.id === e.to)!.y"
-        class="kg-edge"
-      />
-      <g v-for="n in graph.nodes" :key="n.id">
-        <circle
-          :cx="n.x"
-          :cy="n.y"
-          :r="n.type === 'topic' ? 26 : n.type === 'theme' ? 18 : 6"
-          :class="['kg-node', 'kg-' + n.type]"
+  <div class="kg-wrap">
+    <!-- 工具条 -->
+    <div class="kg-toolbar">
+      <div class="kg-search">
+        <el-input
+          v-model="keyword"
+          placeholder="输入关键词，生成知识图谱"
+          clearable
+          style="width: 240px"
+          @keyup.enter="generate"
+        >
+          <template #append>
+            <el-button :loading="loading" @click="generate">生成网络</el-button>
+          </template>
+        </el-input>
+        <el-button @click="parseText">解析文章</el-button>
+      </div>
+
+      <div class="kg-tools">
+        <el-input
+          v-model="searchText"
+          placeholder="搜索节点"
+          clearable
+          size="small"
+          style="width: 150px"
+          :disabled="locked"
         />
-        <text
-          :x="n.x"
-          :y="n.y + (n.type === 'paper' ? 20 : 5)"
-          :class="['kg-label', 'kg-label-' + n.type]"
-          text-anchor="middle"
-        >{{ truncate(n.label, n.type === 'paper' ? 10 : 14) }}</text>
-      </g>
-    </svg>
+        <el-button size="small" :type="locked ? 'primary' : 'default'" @click="toggleLock">
+          {{ locked ? '解锁' : '锁定' }}
+        </el-button>
+        <el-button size="small" @click="resetView">适应</el-button>
+      </div>
+    </div>
+
+    <!-- 图例 -->
+    <div class="kg-legend">
+      <span v-for="it in legendItems" :key="it.type" class="kg-legend-item">
+        <i class="kg-legend-dot" :style="{ background: it.color }" />
+        {{ it.label }}
+      </span>
+    </div>
+
+    <!-- 画布 -->
+    <div class="kg-canvas">
+      <div ref="chartEl" class="kg-echart"></div>
+      <div v-if="!graphData" class="kg-empty">输入关键词生成知识图谱，或点击「解析文章」</div>
+      <div class="kg-zoomhint">滚轮缩放 · 拖拽平移 · 点击节点查看详情</div>
+    </div>
+
+    <!-- 节点详情弹窗（点击节点触发） -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="selectedNode?.label || ''"
+      width="520px"
+      align-center
+      @closed="selectedId = null"
+    >
+      <div v-if="selectedNode" class="kg-detail">
+        <div class="kg-detail-tags">
+          <el-tag :color="TYPE_COLORS[selectedNode.type]" effect="dark" style="color: #fff; border: none">
+            {{ TYPE_LABELS[selectedNode.type] }}
+          </el-tag>
+          <el-tag v-if="selectedNode.importance" type="warning" effect="plain">
+            重要度 {{ '★'.repeat(selectedNode.importance) }}
+          </el-tag>
+          <el-tag v-if="selectedNode.year" effect="plain">{{ selectedNode.year }}</el-tag>
+        </div>
+        <p class="kg-detail-desc">{{ selectedNode.desc || '暂无描述' }}</p>
+
+        <div class="kg-detail-rel">
+          <div class="kg-detail-rel-title">相关节点（{{ relatedNodes.length }}）</div>
+          <ul v-if="relatedNodes.length" class="kg-rel-list">
+            <li v-for="r in relatedNodes" :key="r.node.id" @click="openNode(r.node.id)">
+              <span class="kg-rel-dir" :class="r.dir">{{ r.dir === 'out' ? '→' : '←' }}</span>
+              <span class="kg-rel-rel">{{ r.relation || '关联' }}</span>
+              <span class="kg-rel-name">{{ r.node.label }}</span>
+            </li>
+          </ul>
+          <div v-else class="kg-rel-empty">该节点暂无关联</div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.kg {
+.kg-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kg-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.kg-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.kg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+  color: #5a6b8c;
+}
+.kg-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.kg-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.kg-canvas {
+  position: relative;
   width: 100%;
+  height: 560px;
+  background: #fff;
+  border: 1px solid #eef0f2;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.kg-echart {
+  width: 100%;
+  height: 100%;
 }
 .kg-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #9aa0a6;
-  font-size: 13px;
-  text-align: center;
-  padding: 40px 0;
+  font-size: 14px;
 }
-.kg-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-.kg-edge {
-  stroke: #c7d2e8;
-  stroke-width: 1.5;
-}
-.kg-node {
-  fill: #6a5cff;
-}
-.kg-topic {
-  fill: #2b6cff;
-}
-.kg-theme {
-  fill: #7c6bff;
-}
-.kg-paper {
-  fill: #b9c2d6;
-}
-.kg-label {
-  fill: #444;
+.kg-zoomhint {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
   font-size: 11px;
+  color: #9aa0a6;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
 }
-.kg-label-topic {
-  fill: #fff;
-  font-size: 12px;
+.kg-detail-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.kg-detail-desc {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #2b2f36;
+  margin: 0 0 16px;
+}
+.kg-detail-rel-title {
+  font-size: 13px;
   font-weight: 600;
+  color: #1f2329;
+  margin-bottom: 8px;
 }
-.kg-label-theme {
-  fill: #3a2f8f;
+.kg-rel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+}
+.kg-rel-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.kg-rel-list li:hover {
+  background: #eef3ff;
+}
+.kg-rel-dir {
+  font-weight: 700;
+  color: #2b6cff;
+}
+.kg-rel-dir.in {
+  color: #7c6bff;
+}
+.kg-rel-rel {
   font-size: 12px;
-  font-weight: 600;
+  color: #8a93a6;
+  min-width: 42px;
 }
-.kg-label-paper {
-  fill: #8a93a6;
-  font-size: 10px;
+.kg-rel-name {
+  font-size: 13px;
+  color: #1f2329;
+}
+.kg-rel-empty {
+  font-size: 13px;
+  color: #9aa0a6;
 }
 </style>

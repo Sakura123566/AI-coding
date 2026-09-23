@@ -15,7 +15,6 @@ import {
 import TopicInput from './components/TopicInput.vue'
 import PaperList from './components/PaperList.vue'
 import ResearchReport from './components/ResearchReport.vue'
-import KnowledgeGraph from './components/KnowledgeGraph.vue'
 import AgentBubble from './components/AgentBubble.vue'
 import FavoritesView from './components/FavoritesView.vue'
 import HistoryView from './components/HistoryView.vue'
@@ -109,6 +108,20 @@ function onSearch() {
   rotatePhrase()
   submit()
 }
+
+// 「图谱」：点击后打开独立的 29f5 知识图谱网页（/kg/index.html，与线上 29f5 1:1 克隆）
+function openKnowledgeGraphPage() {
+  const base = import.meta.env.BASE_URL || '/'
+  const url = `${base.replace(/\/$/, '')}/kg/index.html`
+  window.open(url, '_blank', 'noopener')
+}
+function onNav(item: { key: KpMode; label: string; icon: any }) {
+  if (item.key === 'graph') {
+    openKnowledgeGraphPage()
+  } else {
+    store.setMode(item.key)
+  }
+}
 function onSelect(t: string) {
   topic.value = t
   rotatePhrase()
@@ -179,7 +192,7 @@ async function createSpace() {
           class="rail-item"
           :class="{ active: store.mode === item.key }"
           :title="item.label"
-          @click="store.setMode(item.key)"
+          @click="onNav(item)"
         >
           <el-icon class="rail-icon"><component :is="item.icon" /></el-icon>
           <span v-if="leftExpanded" class="rail-label">{{ item.label }}</span>
@@ -291,14 +304,6 @@ async function createSpace() {
 
       <FavoritesView v-else-if="store.mode === 'favorites'" />
       <HistoryView v-else-if="store.mode === 'history'" />
-      <div v-else-if="store.mode === 'graph'" class="mode-view graph-view">
-        <h2 class="mode-title">知识图谱</h2>
-        <KnowledgeGraph
-          :topic="store.topic"
-          :report="store.report"
-          :papers="store.papers"
-        />
-      </div>
     </main>
 
     <!-- 右栏：方向概览（研究导航报告），可拖宽、可收起、可放大整页 -->

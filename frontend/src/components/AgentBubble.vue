@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { useKpStore } from '@/stores/knowledgeParty'
+import EmotionAvatar from '@/components/emotion/EmotionAvatar.vue'
 
 // 智能体浮标：右侧可拖动的（长）椭圆，会冒小话暗示自己是智能体；
 // 点击弹出【小对话窗】（非模态浮层，不遮挡页面，可拖拽），具体对话能力由后端后续接入。
@@ -21,6 +23,13 @@ let hintTimer: ReturnType<typeof setInterval> | null = null
 
 const CHAT_W = 330
 const CHAT_H = 460
+
+// 情绪头像：用 store 的稳定会话 id（可经 URL ?emotionSession= 覆盖，便于后端联调）
+const store = useKpStore()
+const emotionSessionId = computed(() => {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('emotionSession') || store.emotionSessionId
+})
 
 onMounted(() => {
   // 默认位置：右边中上部
@@ -143,6 +152,10 @@ function send() {
     <div class="agent-chat-head" @mousedown="onChatDown">
       <span class="agent-chat-title">🤖 研究智能体</span>
       <button class="agent-chat-close" title="收起" @click="chatOpen = false">×</button>
+    </div>
+    <!-- 情绪头像：默认订阅 store 稳定会话，后端经 SSE 推送情绪状态 -->
+    <div class="agent-emotion">
+      <EmotionAvatar :session-id="emotionSessionId" :size="120" />
     </div>
     <div class="chat">
       <div
@@ -273,6 +286,16 @@ function send() {
 }
 .agent-chat-close:hover {
   background: rgba(255, 255, 255, 0.35);
+}
+/* 情绪头像区：头部下方、对话区上方，居中展示后端实时情绪 */
+.agent-emotion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 10px 4px;
+  background: linear-gradient(180deg, #f6f8ff 0%, #ffffff 100%);
+  border-bottom: 1px solid #eef0f2;
+  flex: 0 0 auto;
 }
 .chat {
   flex: 1 1 auto;

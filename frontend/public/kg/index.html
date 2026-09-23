@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>知识图谱 · 探索</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
+      #app { height: 100vh; display: flex; flex-direction: column; }
+      .head { padding: 14px 20px; border-bottom: 1px solid #eef0f2; display: flex; align-items: center; gap: 12px; }
+      .head h1 { font-size: 16px; margin: 0; color: #1f2329; }
+      .head input { width: 240px; padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 8px; font-size: 13px; }
+      .head button { padding: 6px 14px; border: none; border-radius: 8px; background: #2b6cff; color: #fff; cursor: pointer; font-size: 13px; }
+      #chart { flex: 1 1 auto; width: 100%; }
+      .hint { font-size: 12px; color: #9aa0a6; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="head">
+        <h1>知识图谱</h1>
+        <input id="kw" value="知识图谱" placeholder="输入关键词" />
+        <button id="gen">生成网络</button>
+        <span class="hint">滚轮缩放 · 拖拽平移 · 点击节点查看</span>
+      </div>
+      <div id="chart"></div>
+    </div>
+    <script src="./echarts.min.js"></script>
+    <script>
+      // 最小化占位图（样例数据）。真实图谱由后端经模型 / embedding 生成。
+      const SAMPLE = {
+        nodes: [
+          { id: 'g', name: '知识图谱', symbolSize: 56, itemStyle: { color: '#2b6cff' }, label: { show: true } },
+          { id: 'rep', name: '知识表示学习', symbolSize: 36, itemStyle: { color: '#2b6cff' } },
+          { id: 'gnn', name: '图神经网络', symbolSize: 36, itemStyle: { color: '#2b6cff' } },
+          { id: 're', name: '关系抽取', symbolSize: 36, itemStyle: { color: '#2b6cff' } },
+          { id: 'fb', name: 'Freebase', symbolSize: 26, itemStyle: { color: '#f59e0b' } },
+          { id: 'wd', name: 'Wikidata', symbolSize: 26, itemStyle: { color: '#f59e0b' } },
+          { id: 'qa', name: '问答系统', symbolSize: 30, itemStyle: { color: '#ef5da8' } },
+          { id: 'te', name: 'TransE', symbolSize: 30, itemStyle: { color: '#19b37d' } },
+          { id: 'ro', name: 'RotatE', symbolSize: 30, itemStyle: { color: '#19b37d' } },
+          { id: 'p1', name: 'TransE (NeurIPS\'13)', symbolSize: 20, itemStyle: { color: '#7c6bff' } },
+          { id: 'p3', name: 'RotatE (ICLR\'19)', symbolSize: 20, itemStyle: { color: '#7c6bff' } }
+        ],
+        links: [
+          { source: 'g', target: 'rep' }, { source: 'g', target: 'gnn' }, { source: 'g', target: 're' },
+          { source: 'g', target: 'fb' }, { source: 'g', target: 'wd' }, { source: 'g', target: 'qa' },
+          { source: 'rep', target: 'te' }, { source: 'rep', target: 'ro' },
+          { source: 'te', target: 'p1' }, { source: 'ro', target: 'p3' }
+        ]
+      }
+      const chart = echarts.init(document.getElementById('chart'))
+      function render() {
+        chart.setOption({
+          tooltip: { show: true },
+          series: [{
+            type: 'graph', layout: 'force', roam: true, draggable: true,
+            data: SAMPLE.nodes, links: SAMPLE.links,
+            label: { show: true, position: 'right', color: '#414c60', fontSize: 12 },
+            lineStyle: { color: '#a9bcd8', width: 1.2, opacity: 0.55 },
+            emphasis: { focus: 'adjacency' },
+            force: { repulsion: 320, edgeLength: 120 }
+          }]
+        })
+      }
+      render()
+      document.getElementById('gen').onclick = render
+      window.addEventListener('resize', () => chart.resize())
+    </script>
+  </body>
+</html>
