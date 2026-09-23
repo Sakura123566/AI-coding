@@ -1,0 +1,168 @@
+{
+  "status": "success",
+  "keyword": "Graph Neural Networks",
+  "count": 5,
+  "papers": [
+    {
+      "id": "P1",
+      "title": "Transformers are Graph Neural Networks",
+      "authors": [
+        "Chaitanya K. Joshi"
+      ],
+      "year": 2025,
+      "abstract": "We establish connections between the Transformer architecture, originally introduced for natural language processing, and Graph Neural Networks (GNNs) for representation learning on graphs. We show how Transformers can be viewed as message passing GNNs operating on fully connected graphs of tokens, where the self-attention mechanism capture the relative importance of all tokens w.r.t. each-other, and positional encodings provide hints about sequential ordering or structure. Thus, Transformers are expressive set processing networks that learn relationships among input elements without being constrained by apriori graphs. Despite this mathematical connection to GNNs, Transformers are implemented via dense matrix operations that are significantly more efficient on modern hardware than sparse message passing. This leads to the perspective that Transformers are GNNs currently winning the hardware lottery.",
+      "url": "http://arxiv.org/abs/2506.22084v1",
+      "source": "arXiv"
+    },
+    {
+      "id": "P2",
+      "title": "Fast and Deep Graph Neural Networks",
+      "authors": [
+        "Claudio Gallicchio",
+        "Alessio Micheli"
+      ],
+      "year": 2019,
+      "abstract": "We address the efficiency issue for the construction of a deep graph neural network (GNN). The approach exploits the idea of representing each input graph as a fixed point of a dynamical system (implemented through a recurrent neural network), and leverages a deep architectural organization of the recurrent units. Efficiency is gained by many aspects, including the use of small and very sparse networks, where the weights of the recurrent units are left untrained under the stability condition introduced in this work. This can be viewed as a way to study the intrinsic power of the architecture of a deep GNN, and also to provide insights for the set-up of more complex fully-trained models. Through experimental results, we show that even without training of the recurrent connections, the architecture of small deep GNN is surprisingly able to achieve or improve the state-of-the-art performance on a significant set of tasks in the field of graphs classification.",
+      "url": "http://arxiv.org/abs/1911.08941v1",
+      "source": "arXiv"
+    },
+    {
+      "id": "P3",
+      "title": "Modern graph neural networks do worse than classical greedy algorithms in solving combinatorial optimization problems like maximum independent set",
+      "authors": [
+        "Maria Chiara Angelini",
+        "Federico Ricci-Tersenghi"
+      ],
+      "year": 2022,
+      "abstract": "The recent work ``Combinatorial Optimization with Physics-Inspired Graph Neural Networks'' [Nat Mach Intell 4 (2022) 367] introduces a physics-inspired unsupervised Graph Neural Network (GNN) to solve combinatorial optimization problems on sparse graphs. To test the performances of these GNNs, the authors of the work show numerical results for two fundamental problems: maximum cut and maximum independent set (MIS). They conclude that \"the graph neural network optimizer performs on par or outperforms existing solvers, with the ability to scale beyond the state of the art to problems with millions of variables.\" In this comment, we show that a simple greedy algorithm, running in almost linear time, can find solutions for the MIS problem of much better quality than the GNN. The greedy algorithm is faster by a factor of $10^4$ with respect to the GNN for problems with a million variables. We do not see any good reason for solving the MIS with these GNN, as well as for using a sledgehammer to crack nuts. In general, many claims of superiority of neural networks in solving combinatorial problems are at risk of being not solid enough, since we lack standard benchmarks based on really hard problems. We propose one of such hard benchmarks, and we hope to see future neural network optimizers tested on these problems before any claim of superiority is made.",
+      "url": "http://arxiv.org/abs/2206.13211v2",
+      "source": "arXiv"
+    },
+    {
+      "id": "P4",
+      "title": "Analyzing the Performance of Graph Neural Networks with Pipe Parallelism",
+      "authors": [
+        "Matthew T. Dearing",
+        "Xiaoyan Wang"
+      ],
+      "year": 2020,
+      "abstract": "Many interesting datasets ubiquitous in machine learning and deep learning can be described via graphs. As the scale and complexity of graph-structured datasets increase, such as in expansive social networks, protein folding, chemical interaction networks, and material phase transitions, improving the efficiency of the machine learning techniques applied to these is crucial. In this study, we focus on Graph Neural Networks (GNN) that have found great success in tasks such as node or edge classification and link prediction. However, standard GNN models have scaling limits due to necessary recursive calculations performed through dense graph relationships that lead to memory and runtime bottlenecks. While new approaches for processing larger networks are needed to advance graph techniques, and several have been proposed, we study how GNNs could be parallelized using existing tools and frameworks that are known to be successful in the deep learning community. In particular, we investigate applying pipeline parallelism to GNN models with GPipe, introduced by Google in 2018.",
+      "url": "http://arxiv.org/abs/2012.10840v2",
+      "source": "arXiv"
+    },
+    {
+      "id": "P5",
+      "title": "Deep Graph Neural Networks with Shallow Subgraph Samplers",
+      "authors": [
+        "Hanqing Zeng",
+        "Muhan Zhang",
+        "Yinglong Xia",
+        "Ajitesh Srivastava",
+        "Andrey Malevich",
+        "Rajgopal Kannan",
+        "Viktor Prasanna",
+        "Long Jin",
+        "Ren Chen"
+      ],
+      "year": 2020,
+      "abstract": "While Graph Neural Networks (GNNs) are powerful models for learning representations on graphs, most state-of-the-art models do not have significant accuracy gain beyond two to three layers. Deep GNNs fundamentally need to address: 1). expressivity challenge due to oversmoothing, and 2). computation challenge due to neighborhood explosion. We propose a simple \"deep GNN, shallow sampler\" design principle to improve both the GNN accuracy and efficiency -- to generate representation of a target node, we use a deep GNN to pass messages only within a shallow, localized subgraph. A properly sampled subgraph may exclude irrelevant or even noisy nodes, and still preserve the critical neighbor features and graph structures. The deep GNN then smooths the informative local signals to enhance feature learning, rather than oversmoothing the global graph signals into just \"white noise\". We theoretically justify why the combination of deep GNNs with shallow samplers yields the best learning performance. We then propose various sampling algorithms and neural architecture extensions to achieve good empirical results. On the largest public graph dataset, ogbn-papers100M, we achieve state-of-the-art accuracy with an order of magnitude reduction in hardware cost.",
+      "url": "http://arxiv.org/abs/2012.01380v3",
+      "source": "arXiv"
+    }
+  ],
+  "report": {
+    "overview": "图神经网络（GNN）是面向图结构数据的表示学习模型，通过消息传递机制聚合邻居信息，广泛应用于节点分类、链接预测和组合优化等任务。当前研究主要围绕四个核心问题展开：一是模型表达能力的理论边界，例如Transformer与GNN的等价性分析；二是深层GNN的过平滑与邻域爆炸问题，需要子图采样或循环结构来缓解；三是计算效率与可扩展性，包括并行化、稀疏化和免训练策略；四是GNN在组合优化等实际任务中的性能评估，部分工作指出其表现可能不及经典贪心算法。这些方向相互交织，共同推动GNN从理论理解走向高效、可靠的工程应用。",
+    "themes": [
+      {
+        "name": "GNN与Transformer的理论联系",
+        "description": "探讨Transformer自注意力机制与GNN消息传递的等价性，将Transformer视为全连接图上的GNN，分析位置编码和集合处理能力。",
+        "paper_ids": [
+          "P1"
+        ]
+      },
+      {
+        "name": "深层GNN的架构与训练效率",
+        "description": "研究深层GNN的构建方法，包括循环神经网络固定点表示、免训练权重和深层架构组织，以提升效率和表达能力。",
+        "paper_ids": [
+          "P2"
+        ]
+      },
+      {
+        "name": "GNN在组合优化中的性能评估",
+        "description": "检验物理启发式GNN求解最大割和最大独立集等组合优化问题的实际表现，并与经典贪心算法进行对比分析。",
+        "paper_ids": [
+          "P3"
+        ]
+      },
+      {
+        "name": "GNN的并行化与可扩展性",
+        "description": "针对大规模图数据，研究管道并行等并行策略以突破标准GNN的扩展限制，提升训练和推理效率。",
+        "paper_ids": [
+          "P4"
+        ]
+      },
+      {
+        "name": "深层GNN的子图采样方法",
+        "description": "提出“深GNN、浅采样器”设计原则，通过局部子图采样缓解过平滑和邻域爆炸，兼顾深层表达与计算效率。",
+        "paper_ids": [
+          "P5"
+        ]
+      }
+    ],
+    "research_trends": [
+      "从理论层面统一Transformer与GNN的表示学习框架，探索自注意力与消息传递的等价条件",
+      "深层GNN的过平滑与邻域爆炸问题持续受到关注，子图采样和循环结构成为主要解决思路",
+      "GNN在组合优化等任务中的实际性能受到严格审视，与经典算法的对比推动更客观的评估标准",
+      "面向大规模图的并行化和可扩展性技术（如管道并行、稀疏化）成为工程落地的关键",
+      "免训练或轻量训练策略被用于提升GNN效率，同时保持模型表达能力"
+    ],
+    "reading_path": [
+      {
+        "step": 1,
+        "paper_ids": [
+          "P1"
+        ],
+        "reason": "从理论视角理解Transformer与GNN的等价性，建立对GNN消息传递本质的直观认识，适合入门。"
+      },
+      {
+        "step": 2,
+        "paper_ids": [
+          "P5"
+        ],
+        "reason": "了解深层GNN的核心挑战（过平滑、邻域爆炸）及子图采样这一主流解决思路，衔接理论与工程。"
+      },
+      {
+        "step": 3,
+        "paper_ids": [
+          "P2"
+        ],
+        "reason": "学习另一种深层GNN构建方式：循环固定点表示与免训练权重，拓展对效率与表达能力的理解。"
+      },
+      {
+        "step": 4,
+        "paper_ids": [
+          "P4"
+        ],
+        "reason": "掌握GNN并行化与可扩展性的实际工程方法，理解大规模图训练中的瓶颈与对策。"
+      },
+      {
+        "step": 5,
+        "paper_ids": [
+          "P3"
+        ],
+        "reason": "通过组合优化案例审视GNN的实际性能边界，培养对模型能力评估的批判性思维。"
+      }
+    ],
+    "exploration_questions": [
+      "Transformer与GNN的等价性在何种图结构或任务条件下成立？位置编码对等价性的影响有多大？",
+      "免训练循环GNN的稳定性条件如何影响其在不同图数据上的泛化能力？",
+      "子图采样策略的采样偏差如何定量影响深层GNN的节点表示质量？",
+      "管道并行在超大规模图上的通信开销与加速比之间如何权衡？",
+      "GNN在组合优化中表现不及贪心算法，是否与图稀疏性、问题规模或训练目标有关？"
+    ],
+    "limitations": "本报告仅基于提供的5篇论文摘要归纳，检索范围有限，未覆盖GNN全部子领域；AI归纳可能存在偏差，请务必核对原文并自行扩展检索。"
+  },
+  "report_error": null,
+  "warnings": [],
+  "message": null
+}

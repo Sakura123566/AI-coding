@@ -1,0 +1,37 @@
+{
+  "idle_timeout": 60,
+  "idle_check_interval": 1,
+  "temporary_emotion_duration": 3,
+  "error_avatar": "温柔安抚",
+  "success_avatar": "开心",
+  "state_resource_map": {
+    "待机": "persona_idle",
+    "待机疲惫": "persona_idle_tired",
+    "开心": "persona_happy",
+    "温柔安抚": "persona_comforting",
+    "细心讲解": "persona_explain",
+    "细心讲解2": "persona_deep_explain",
+    "严肃讲解": "persona_serious_explain",
+    "严肃指正": "persona_correction",
+    "论文搜索": "workflow_searching",
+    "阅读论文": "workflow_reading",
+    "编写代码": "workflow_coding",
+    "协作": "workflow_collaborating",
+    "灵光一现": "workflow_eureka"
+  },
+  "fallback_resource_map": {
+    "待机": "idle",
+    "待机疲惫": "sleepy",
+    "开心": "success",
+    "温柔安抚": "error",
+    "细心讲解": "searching",
+    "细心讲解2": "reading",
+    "严肃讲解": "thinking",
+    "严肃指正": "error",
+    "论文搜索": "searching",
+    "阅读论文": "reading",
+    "编写代码": "coding",
+    "协作": "workflow_coding",
+    "灵光一现": "success"
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "status": "success",
+  "keyword": "Graph Neural Networks",
+  "resolved_keyword": null,
+  "count": 5,
+  "papers": [
+    {
+      "id": "P1",
+      "title": "The Graph Neural Network Model",
+      "authors": [
+        "Franco Scarselli",
+        "M. Gori",
+        "Ah Chung Tsoi",
+        "Markus Hagenbuchner",
+        "Gabriele Monfardini"
+      ],
+      "year": 2008,
+      "abstract": "Many underlying relationships among data in several areas of science and engineering, e.g., computer vision, molecular chemistry, molecular biology, pattern recognition, and data mining, can be represented in terms of graphs. In this paper, we propose a new neural network model, called graph neural network (GNN) model, that extends existing neural network methods for processing the data represented in graph domains. This GNN model, which can directly process most of the practically useful types of graphs, e.g., acyclic, cyclic, directed, and undirected, implements a function tau(G,n) is an element of IR(m) that maps a graph G and one of its nodes n into an m-dimensional Euclidean space. A supervised learning algorithm is derived to estimate the parameters of the proposed GNN model. The computational cost of the proposed algorithm is also considered. Some experimental results are shown to validate the proposed learning algorithm, and to demonstrate its generalization capabilities.",
+      "url": "https://doi.org/10.1109/tnn.2008.2005605",
+      "source": "IEEE Transactions on Neural Networks"
+    },
+    {
+      "id": "P2",
+      "title": "A Comprehensive Survey on Graph Neural Networks",
+      "authors": [
+        "Zonghan Wu",
+        "Shirui Pan",
+        "Fengwen Chen",
+        "Guodong Long",
+        "Chengqi Zhang",
+        "Philip S. Yu"
+      ],
+      "year": 2020,
+      "abstract": "Deep learning has revolutionized many machine learning tasks in recent years, ranging from image classification and video processing to speech recognition and natural language understanding. The data in these tasks are typically represented in the Euclidean space. However, there is an increasing number of applications, where data are generated from non-Euclidean domains and are represented as graphs with complex relationships and interdependency between objects. The complexity of graph data has imposed significant challenges on the existing machine learning algorithms. Recently, many studies on extending deep learning approaches for graph data have emerged. In this article, we provide a comprehensive overview of graph neural networks (GNNs) in data mining and machine learning fields. We propose a new taxonomy to divide the state-of-the-art GNNs into four categories, namely, recurrent GNNs, convolutional GNNs, graph autoencoders, and spatial-temporal GNNs. We further discuss the applications of GNNs across various domains and summarize the open-source codes, benchmark data sets, and model evaluation of GNNs. Finally, we propose potential research directions in this rapidly growing field.",
+      "url": "https://doi.org/10.1109/tnnls.2020.2978386",
+      "source": "IEEE Transactions on Neural Networks and Learning Systems"
+    },
+    {
+      "id": "P3",
+      "title": "Graph neural networks: A review of methods and applications",
+      "authors": [
+        "Jie Zhou",
+        "Ganqu Cui",
+        "Shengding Hu",
+        "Zhengyan Zhang",
+        "Cheng Yang",
+        "Zhiyuan Liu",
+        "Lifeng Wang",
+        "Changcheng Li",
+        "Maosong Sun"
+      ],
+      "year": 2020,
+      "abstract": "Lots of learning tasks require dealing with graph data which contains rich relation information among elements. Modeling physics systems, learning molecular fingerprints, predicting protein interface, and classifying diseases demand a model to learn from graph inputs. In other domains such as learning from non-structural data like texts and images, reasoning on extracted structures (like the dependency trees of sentences and the scene graphs of images) is an important research topic which also needs graph reasoning models. Graph neural networks (GNNs) are neural models that capture the dependence of graphs via message passing between the nodes of graphs. In recent years, variants of GNNs such as graph convolutional network (GCN), graph attention network (GAT), graph recurrent network (GRN) have demonstrated ground-breaking performances on many deep learning tasks. In this survey, we propose a general design pipeline for GNN models and discuss the variants of each component, systematically categorize the applications, and propose four open problems for future research.",
+      "url": "https://doi.org/10.1016/j.aiopen.2021.01.001",
+      "source": "AI Open"
+    },
+    {
+      "id": "P4",
+      "title": "Targeted Branching for the Maximum Independent Set Problem Using Graph Neural Networks",
+      "authors": [
+        "Silva, Gabriel",
+        "Rodrigues, Mário",
+        "Teixeira, António",
+        "Amorim, Marlene"
+      ],
+      "year": 2024,
+      "abstract": "Identifying a maximum independent set is a fundamental NP-hard problem. This problem has several real-world applications and requires finding the largest possible set of vertices not adjacent to each other in an undirected graph. Over the past few years, branch-and-bound and branch-and-reduce algorithms have emerged as some of the most effective methods for solving the problem exactly. Specifically, the branch-and-reduce approach, which combines branch-and-bound principles with reduction rules, has proven particularly successful in tackling previously unmanageable real-world instances. This progress was largely made possible by the development of more effective reduction rules. Nevertheless, other key components that can impact the efficiency of these algorithms have not received the same level of interest. Among these is the branching strategy, which determines which vertex to branch on next. Until recently, the most widely used strategy was to choose the vertex of the highest degree. In this work, we present a graph neural network approach for selecting the next branching vertex. The intricate nature of current branch-and-bound solvers makes supervised and reinforcement learning difficult. Therefore, we use a population-based genetic algorithm to evolve the model’s parameters instead. Our proposed approach results in a speedup on 73% of the benchmark instances with a median speedup of 24%.",
+      "url": "https://doi.org/10.4230/lipics.sea.2024.20",
+      "source": "DROPS (Schloss Dagstuhl – Leibniz Center for Informatics)"
+    },
+    {
+      "id": "P5",
+      "title": "A Comprehensive Survey on Graph Neural Networks",
+      "authors": [
+        "Wu, Z",
+        "Pan, S",
+        "Chen, F",
+        "Long, G",
+        "Zhang, C",
+        "Yu, PS"
+      ],
+      "year": 2020,
+      "abstract": "Deep learning has revolutionized many machine learning tasks in recent years, ranging from image classification and video processing to speech recognition and natural language understanding. The data in these tasks are typically represented in the Euclidean space. However, there is an increasing number of applications, where data are generated from non-Euclidean domains and are represented as graphs with complex relationships and interdependency between objects. The complexity of graph data has imposed significant challenges on the existing machine learning algorithms. Recently, many studies on extending deep learning approaches for graph data have emerged. In this article, we provide a comprehensive overview of graph neural networks (GNNs) in data mining and machine learning fields. We propose a new taxonomy to divide the state-of-the-art GNNs into four categories, namely, recurrent GNNs, convolutional GNNs, graph autoencoders, and spatial-temporal GNNs. We further discuss the applications of GNNs across various domains and summarize the open-source codes, benchmark data sets, and model evaluation of GNNs. Finally, we propose potential research directions in this rapidly growing field.",
+      "url": "https://openalex.org/W4210257598",
+      "source": "UTS ePRESS (University of Technology Sydney)"
+    }
+  ],
+  "report": {
+    "overview": "【本地样例报告，未接入模型】围绕“Graph Neural Networks”共检索到 5 篇论文。该方向大致可以分为若干个子主题，入门建议从综述或高被引工作读起，再按子方向深入。请在 .env 中配置 LLM_API_KEY 并把 LLM_PROVIDER 改为 openai，即可获得真实的研究导航报告。",
+    "themes": [
+      {
+        "name": "基础方法与代表性工作",
+        "description": "该方向的奠基性论文与常用基线。",
+        "paper_ids": [
+          "P1",
+          "P2"
+        ]
+      },
+      {
+        "name": "方法改进与变体",
+        "description": "针对原始方法的效率、效果或适用场景的改进。",
+        "paper_ids": [
+          "P3",
+          "P4"
+        ]
+      },
+      {
+        "name": "应用与评测",
+        "description": "将方法落到具体任务或数据集上的研究。",
+        "paper_ids": [
+          "P5"
+        ]
+      }
+    ],
+    "research_trends": [
+      "【样例】方法从单一模态走向多模态融合",
+      "【样例】更强调可复现实验与公开评测集",
+      "【样例】效率与落地成本成为重要评价指标"
+    ],
+    "reading_path": [
+      {
+        "step": 1,
+        "paper_ids": [
+          "P1"
+        ],
+        "reason": "【样例】先建立整体印象"
+      },
+      {
+        "step": 2,
+        "paper_ids": [
+          "P2",
+          "P3"
+        ],
+        "reason": "【样例】再读两篇代表性方法"
+      },
+      {
+        "step": 3,
+        "paper_ids": [
+          "P4",
+          "P5"
+        ],
+        "reason": "【样例】最后看应用与局限"
+      }
+    ],
+    "exploration_questions": [
+      "【样例】这些方法在中文语料/本地数据上表现如何？",
+      "【样例】近两年的评测结论是否仍然成立？",
+      "【样例】该方向有哪些公开代码与数据集可供复现？"
+    ],
+    "limitations": "【样例】本文为本地样例；真实报告的检索范围、摘要质量与 AI 归纳均存在局限，请核对原文。"
+  },
+  "report_error": null,
+  "warnings": [
+    "当前为本地样例报告（LLM_PROVIDER=mock），并非模型真实产出。"
+  ],
+  "message": null
+}

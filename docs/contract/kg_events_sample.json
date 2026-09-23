@@ -1,0 +1,44 @@
+{
+  "status": "success",
+  "count": 4,
+  "events": [
+    {
+      "type": "search",
+      "id": "s1",
+      "user_id": 1,
+      "keyword": "查图神经网络最新论文",
+      "resolved_keyword": "graph neural networks",
+      "source": "mock",
+      "result_count": 8,
+      "session_id": "s-10b8e7583ad1",
+      "created_at": "2026-09-21T17:19:06Z"
+    },
+    {
+      "type": "chat",
+      "id": "m5",
+      "user_id": 1,
+      "session_id": "s-10b8e7583ad1",
+      "text": "知识图谱和推荐系统结合的方向怎么样",
+      "intent": null,
+      "created_at": "2026-09-21T17:19:06Z"
+    },
+    {
+      "type": "chat",
+      "id": "m3",
+      "user_id": 1,
+      "session_id": "s-10b8e7583ad1",
+      "text": "帮我查一下图神经网络的最新论文",
+      "intent": null,
+      "created_at": "2026-09-21T17:19:06Z"
+    },
+    {
+      "type": "chat",
+      "id": "m1",
+      "user_id": 1,
+      "session_id": "s-10b8e7583ad1",
+      "text": "我在研究图神经网络在推荐系统上的应用",
+      "intent": null,
+      "created_at": "2026-09-21T17:19:06Z"
+    }
+  ]
+}

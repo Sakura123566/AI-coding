@@ -1,0 +1,5 @@
+{
+  "status": "error",
+  "error_code": "MCP_TIMEOUT",
+  "message": "论文检索服务暂时不可用（请求超时：export.arxiv.org），请稍后重试。"
+}

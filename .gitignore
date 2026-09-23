@@ -1,34 +1,30 @@
-# Dependencies
-node_modules
-
-# Build output
-dist
-dist-ssr
-web-dist
-web-dist-*
-
-# Editor / OS
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Local env (VITE_ vars are browser-exposed, but keep secrets out of VCS)
+# 密钥绝不进仓库
 .env
-.env.local
-.env.*.local
-*.local
+*.env
+!\.env.example
 
-# TS build info
-*.tsbuildinfo
+# 用户数据（SQLite：账号、会话、记忆、画像）
+backend/data/
+*.db
+*.db-wal
+*.db-shm
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.log
+
+# 前端（队员2 的目录）
+node_modules/
+dist/
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
+
+# 前端部署产物（沙箱 CloudStudio 构建用，非源码）
+web-dist/
+web-dist-*/

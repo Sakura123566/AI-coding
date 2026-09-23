@@ -1,0 +1,18 @@
+{
+  "status": "success",
+  "message_id": 8,
+  "user_message_id": 7,
+  "reply": "【本地样例回复，未接入模型】我记得你提过：用户在研究图神经网络在推荐系统上的应用。你说的是：我之前在研究什么方向来着。把 .env 的 LLM_PROVIDER 改成 openai 并填入密钥后，这里会是模型的真实回答。",
+  "emotion": "happy",
+  "intent": "chat",
+  "intent_mode": "fallback",
+  "mode": "mock",
+  "papers": [],
+  "recalled_memories": [
+    "用户在研究图神经网络在推荐系统上的应用"
+  ],
+  "used_keywords": [],
+  "degraded": false,
+  "degrade_reason": null,
+  "profile_used": false
+}

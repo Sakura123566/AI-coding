@@ -1,0 +1,10 @@
+{
+  "status": "success",
+  "keyword": "zzqqxx-nonexistent-topic-12345",
+  "count": 0,
+  "papers": [],
+  "report": null,
+  "report_error": null,
+  "warnings": [],
+  "message": "没有找到论文，试试更具体或更宽泛的关键词。"
+}

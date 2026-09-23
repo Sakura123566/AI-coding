@@ -1,0 +1,20 @@
+{
+  "status": "success",
+  "keyword": "Graph Neural Networks",
+  "count": 5,
+  "papers": [
+    {
+      "id": "P1",
+      "title": "论文标题",
+      "authors": ["作者"],
+      "year": 2024,
+      "abstract": "摘要",
+      "url": "https://...",
+      "source": "arXiv"
+    }
+  ],
+  "report": null,
+  "report_error": "报告生成失败：未配置 LLM_API_KEY，请先在 .env 中填入密钥",
+  "warnings": [],
+  "message": null
+}

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Research Navigator · 后端自测台</title>
+<style>
+  :root { --bd:#e3e3e8; --bg:#f7f7f9; --fg:#1f2328; --mut:#6b7280; --pri:#2563eb; --ok:#0f6e56; --err:#a32d2d; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px; font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; color:var(--fg); background:var(--bg); }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  h2 { font-size:14px; margin:0 0 10px; font-weight:600; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; }
+  .sub { color:var(--mut); font-size:12px; margin-bottom:18px; }
+  .card { background:#fff; border:1px solid var(--bd); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input, textarea, select { font:inherit; padding:6px 8px; border:1px solid var(--bd); border-radius:6px; background:#fff; }
+  input[type=text] { flex:1; min-width:180px; }
+  textarea { width:100%; min-height:60px; resize:vertical; }
+  button { font:inherit; padding:6px 14px; border:1px solid var(--pri); background:var(--pri); color:#fff; border-radius:6px; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--pri); }
+  button:disabled { opacity:.5; cursor:default; }
+  pre { margin:8px 0 0; padding:10px 12px; background:#f3f4f6; border-radius:8px; overflow:auto; max-height:340px; font:12px/1.6 ui-monospace,Consolas,monospace; white-space:pre-wrap; word-break:break-all; }
+  table { border-collapse:collapse; width:100%; margin-top:8px; font-size:13px; }
+  th, td { border:1px solid var(--bd); padding:5px 8px; text-align:left; }
+  th { background:#f3f4f6; font-weight:600; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:#eef2ff; color:#3730a3; margin-right:6px; }
+  .tag.warn { background:#fef3c7; color:#92400e; }
+  .tag.ok { background:#dcfce7; color:#14532d; }
+  .tag.err { background:#fee2e2; color:#991b1b; }
+  .hint { color:var(--mut); font-size:12px; margin-top:6px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:900px) { .cols { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<h1>Research Navigator · 后端自测台</h1>
+<div class="sub">双击本文件即可打开。后端 CORS 已放行 <code>*</code>，页面可直接请求本机后端。</div>
+
+<div class="card">
+  <h2>连接</h2>
+  <div class="row">
+    <input type="text" id="base" value="http://127.0.0.1:8000" />
+    <button onclick="checkHealth()">检查后端</button>
+    <span id="healthTag"></span>
+  </div>
+  <div class="hint">后端没起？在项目根目录跑 <code>.venv\Scripts\python.exe -m uvicorn backend.main:app --port 8000</code> 或双击 <code>start_backend.bat</code>。</div>
+  <pre id="healthOut">（未检查）</pre>
+</div>
+
+<div class="card">
+  <h2>账号</h2>
+  <div class="row">
+    <input type="text" id="username" placeholder="用户名" style="max-width:180px" />
+    <input type="text" id="password" placeholder="密码（≥6 位）" style="max-width:180px" />
+    <button onclick="register()">注册</button>
+    <button class="ghost" onclick="login()">登录</button>
+    <span id="authTag"></span>
+  </div>
+  <div class="hint">token 存在页面内存里，刷新即失效。</div>
+</div>
+
+<div class="card">
+  <h2>对话（Q版导航员）</h2>
+  <div class="row" style="margin-bottom:8px">
+    <button class="ghost" onclick="newSession()">新建会话</button>
+    <span id="sessionTag"></span>
+  </div>
+  <textarea id="msg" placeholder="试试：我在研究图神经网络在推荐系统上的应用   /   帮我查一下图神经网络的最新论文"></textarea>
+  <div class="row" style="margin-top:8px">
+    <button onclick="send()">发送</button>
+    <span id="sendTag"></span>
+  </div>
+  <div id="chatOut"></div>
+</div>
+
+<div class="cols">
+  <div class="card">
+    <h2>长期记忆</h2>
+    <div class="row">
+      <button class="ghost" onclick="loadMemory()">刷新</button>
+      <button class="ghost" onclick="closeSession()">关闭会话并整理记忆</button>
+    </div>
+    <div id="memOut"></div>
+  </div>
+  <div class="card">
+    <h2>用户画像</h2>
+    <div class="row">
+      <button class="ghost" onclick="loadProfile()">刷新</button>
+      <button class="ghost" onclick="loadProfile(true)">强制重算</button>
+    </div>
+    <div id="pfOut"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>关键词（喂给知识图谱）</h2>
+  <div class="row">
+    <button class="ghost" onclick="loadKeywords()">刷新</button>
+    <span class="hint">等价于 <code>GET /api/kg/keywords</code>，图谱同学拿的就是这份数据</span>
+  </div>
+  <div id="kwOut"></div>
+</div>
+
+<script>
+var state = { token: "", sessionId: "", userId: null };
+
+function base() { return document.getElementById("base").value.replace(/\/+$/, ""); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function show(id, html) { document.getElementById(id).innerHTML = html; }
+function tag(id, text, cls) {
+  document.getElementById(id).innerHTML = text ? '<span class="tag ' + (cls || "") + '">' + esc(text) + "</span>" : "";
+}
+function fmt(obj) { return "<pre>" + esc(JSON.stringify(obj, null, 2)) + "</pre>"; }
+
+async function api(method, path, body) {
+  var headers = { "Content-Type": "application/json" };
+  if (state.token) headers["Authorization"] = "Bearer " + state.token;
+  var res = await fetch(base() + path, {
+    method: method,
+    headers: headers,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  var data = null;
+  try { data = await res.json(); } catch (e) { data = { raw: "(响应不是 JSON)" }; }
+  if (!res.ok) {
+    var err = new Error((data && data.message) || ("HTTP " + res.status));
+    err.code = (data && data.error_code) || ("HTTP_" + res.status);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+async function checkHealth() {
+  try {
+    var data = await api("GET", "/api/health");
+    tag("healthTag", "已连接", "ok");
+    show("healthOut", esc(JSON.stringify(data, null, 2)));
+  } catch (e) {
+    tag("healthTag", "连不上：" + e.message, "err");
+    show("healthOut", "连不上后端：\n" + e.message +
+      "\n\n请确认：\n1. 后端是否已在 8000 端口启动\n2. 地址是否填了 http://127.0.0.1:8000（不要带路径）\n3. 浏览器是否和后端在同一台机器");
+  }
+}
+
+async function register() {
+  var u = document.getElementById("username").value.trim();
+  var p = document.getElementById("password").value;
+  try {
+    var data = await api("POST", "/api/auth/register", { username: u, password: p, display_name: u });
+    state.token = data.token; state.userId = data.user_id;
+    tag("authTag", "已注册并登录 uid=" + data.user_id, "ok");
+  } catch (e) { tag("authTag", e.code + "：" + e.message, "err"); }
+}
+
+async function login() {
+  var u = document.getElementById("username").value.trim();
+  var p = document.getElementById("password").value;
+  try {
+    var data = await api("POST", "/api/auth/login", { username: u, password: p });
+    state.token = data.token; state.userId = data.user_id;
+    tag("authTag", "已登录 uid=" + data.user_id, "ok");
+  } catch (e) { tag("authTag", e.code + "：" + e.message, "err"); }
+}
+
+async function newSession() {
+  try {
+    var data = await api("POST", "/api/chat/sessions", {});
+    state.sessionId = data.session.id;
+    tag("sessionTag", "会话 " + state.sessionId, "ok");
+    show("chatOut", "");
+  } catch (e) { tag("sessionTag", e.code + "：" + e.message, "err"); }
+}
+
+async function send() {
+  var text = document.getElementById("msg").value.trim();
+  if (!text) return;
+  if (!state.sessionId) await newSession();
+  tag("sendTag", "思考中…", "warn");
+  try {
+    var data = await api("POST", "/api/chat/message", { session_id: state.sessionId, content: text });
+    tag("sendTag", "完成", "ok");
+    var html = '<table>'
+      + "<tr><th>情绪</th><td>" + esc(data.emotion) + "</td></tr>"
+      + "<tr><th>意图</th><td>" + esc(data.intent) + "（" + esc(data.intent_mode) + "）</td></tr>"
+      + "<tr><th>模式</th><td>" + esc(data.mode) + "</td></tr>"
+      + (data.degraded ? '<tr><th>降级</th><td><span class="tag err">' + esc(data.degrade_reason) + "</span></td></tr>" : "")
+      + (data.recalled_memories && data.recalled_memories.length
+          ? "<tr><th>召回记忆</th><td>" + data.recalled_memories.map(esc).join("<br>") + "</td></tr>" : "")
+      + "</table>"
+      + "<div style='margin-top:10px'><b>回复：</b>" + esc(data.reply) + "</div>";
+    if (data.papers && data.papers.length) {
+      html += "<div style='margin-top:8px'><b>论文 " + data.papers.length + " 篇：</b><ul>"
+        + data.papers.map(function (p) {
+            return "<li>[" + esc(p.id) + "] " + esc(p.title) + "（" + esc(p.year) + "）</li>";
+          }).join("") + "</ul></div>";
+    }
+    show("chatOut", html);
+    document.getElementById("msg").value = "";
+  } catch (e) {
+    tag("sendTag", e.code + "：" + e.message, "err");
+    if (e.status === 401) tag("sendTag", "请先注册或登录", "err");
+  }
+}
+
+async function closeSession() {
+  if (!state.sessionId) { show("memOut", "先建一个会话"); return; }
+  try {
+    var data = await api("POST", "/api/chat/sessions/" + state.sessionId + "/close", {});
+    show("memOut", "<b>摘要：</b>" + esc(data.summary)
+      + '<div class="hint">抽取方式：' + esc(data.memory_mode) + "　样本量：" + esc(data.sample_size) + "</div>"
+      + "<b style='display:block;margin-top:8px'>新增记忆：</b>"
+      + (data.added_memories.length
+          ? "<ul>" + data.added_memories.map(function (m) { return "<li>[" + esc(m.type) + "] " + esc(m.content) + "</li>"; }).join("") + "</ul>"
+          : "<div class='hint'>这次没抽出新的稳定事实（正常：模型没把握的不会记）</div>"));
+  } catch (e) { show("memOut", "<span class='tag err'>" + esc(e.message) + "</span>"); }
+}
+
+async function loadMemory() {
+  try {
+    var data = await api("GET", "/api/memory?limit=50");
+    if (!data.count) { show("memOut", "<div class='hint'>还没有记忆。聊几句再点“关闭会话并整理记忆”。</div>"); return; }
+    show("memOut", "<table><tr><th>类型</th><th>内容</th><th>权重</th><th>命中</th><th>来源</th></tr>"
+      + data.memories.map(function (m) {
+          return "<tr><td>" + esc(m.mem_type) + "</td><td>" + esc(m.content) + "</td><td>" + esc(m.weight)
+            + "</td><td>" + esc(m.hit_count) + "</td><td>" + esc(m.source_id) + "</td></tr>";
+        }).join("") + "</table>");
+  } catch (e) { show("memOut", "<span class='tag err'>" + esc(e.message) + "</span>"); }
+}
+
+async function loadProfile(force) {
+  try {
+    var data = await api("GET", "/api/profile" + (force ? "?refresh=true" : ""));
+    var p = data.profile || {};
+    var html = data.has_enough_data
+      ? '<span class="tag ok">数据充足</span>'
+      : '<span class="tag warn">数据不足（样本 ' + esc(data.sample_size) + " / 需 " + 5 + "）→ 前端应显示占位卡片</span>";
+    if (p.domains && p.domains.length) {
+      html += "<div style='margin-top:8px'><b>方向：</b>"
+        + p.domains.map(function (d) { return esc(d.name) + " " + esc(d.weight); }).join("、") + "</div>";
+    }
+    if (p.interests && p.interests.length) {
+      html += "<div><b>兴趣：</b>"
+        + p.interests.slice(0, 6).map(function (i) { return esc(i.tag) + "(" + esc(i.trend) + ")"; }).join("、") + "</div>";
+    }
+    if (p.activity) {
+      html += "<div><b>活跃：</b>检索 " + esc(p.activity.total_searches) + " 次 / 提问 "
+        + esc(p.activity.total_messages) + " 条 / 活跃 " + esc(p.activity.active_days) + " 天</div>";
+    }
+    if (p.style && p.style.summary) html += "<div><b>风格：</b>" + esc(p.style.summary) + "</div>";
+    html += fmt(p);
+    show("pfOut", html);
+  } catch (e) { show("pfOut", "<span class='tag err'>" + esc(e.message) + "</span>"); }
+}
+
+async function loadKeywords() {
+  try {
+    var path = "/api/kg/keywords" + (state.userId ? "?user_id=" + state.userId + "&min_times=1" : "");
+    var data = await api("GET", path);
+    if (!data.count) { show("kwOut", "<div class='hint'>还没有关键词。先聊几句或发一次检索。</div>"); return; }
+    show("kwOut", "<table><tr><th>规范词 term</th><th>展示</th><th>权重</th><th>类别</th><th>次数</th><th>最近出现</th></tr>"
+      + data.keywords.map(function (k) {
+          return "<tr><td>" + esc(k.term) + "</td><td>" + esc(k.display) + "</td><td>" + esc(k.weight)
+            + "</td><td>" + esc(k.category) + "</td><td>" + esc(k.times) + "</td><td>" + esc(k.last_seen) + "</td></tr>";
+        }).join("") + "</table>");
+  } catch (e) { show("kwOut", "<span class='tag err'>" + esc(e.message) + "</span>"); }
+}
+
+document.getElementById("msg").addEventListener("keydown", function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") send();
+});
+checkHealth();
+</script>
+</body>
+</html>

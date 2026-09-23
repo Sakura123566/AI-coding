@@ -1,0 +1,135 @@
+{
+  "status": "success",
+  "keyword": "Graph Neural Networks",
+  "resolved_keyword": null,
+  "count": 5,
+  "papers": [
+    {
+      "id": "P1",
+      "title": "Semi-Supervised Classification with Graph Convolutional Networks",
+      "authors": [
+        "样例作者 A",
+        "样例作者 B"
+      ],
+      "year": 2017,
+      "abstract": "We present a scalable approach for semi-supervised learning on graph-structured data based on an efficient variant of convolutional neural networks which operate directly on graphs.",
+      "url": null,
+      "source": "mock"
+    },
+    {
+      "id": "P2",
+      "title": "GraphSAGE: Inductive Representation Learning on Large Graphs",
+      "authors": [
+        "样例作者 A",
+        "样例作者 B"
+      ],
+      "year": 2017,
+      "abstract": "We propose GraphSAGE, a general inductive framework that leverages node feature information to efficiently generate node embeddings for previously unseen data.",
+      "url": null,
+      "source": "mock"
+    },
+    {
+      "id": "P3",
+      "title": "Graph Attention Networks",
+      "authors": [
+        "样例作者 A",
+        "样例作者 B"
+      ],
+      "year": 2018,
+      "abstract": "We introduce attention-based neighborhood aggregation for graphs, enabling different weights to different nodes without expensive matrix operations.",
+      "url": null,
+      "source": "mock"
+    },
+    {
+      "id": "P4",
+      "title": "Graph Neural Networks 相关研究（本地样例 4）",
+      "authors": [
+        "样例作者"
+      ],
+      "year": 2023,
+      "abstract": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
+      "url": null,
+      "source": "mock"
+    },
+    {
+      "id": "P5",
+      "title": "Graph Neural Networks 相关研究（本地样例 5）",
+      "authors": [
+        "样例作者"
+      ],
+      "year": 2023,
+      "abstract": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
+      "url": null,
+      "source": "mock"
+    }
+  ],
+  "report": {
+    "overview": "【本地样例报告，未接入模型】围绕“Graph Neural Networks”共检索到 5 篇论文。该方向大致可以分为若干个子主题，入门建议从综述或高被引工作读起，再按子方向深入。请在 .env 中配置 LLM_API_KEY 并把 LLM_PROVIDER 改为 openai，即可获得真实的研究导航报告。",
+    "themes": [
+      {
+        "name": "基础方法与代表性工作",
+        "description": "该方向的奠基性论文与常用基线。",
+        "paper_ids": [
+          "P1",
+          "P2"
+        ]
+      },
+      {
+        "name": "方法改进与变体",
+        "description": "针对原始方法的效率、效果或适用场景的改进。",
+        "paper_ids": [
+          "P3",
+          "P4"
+        ]
+      },
+      {
+        "name": "应用与评测",
+        "description": "将方法落到具体任务或数据集上的研究。",
+        "paper_ids": [
+          "P5"
+        ]
+      }
+    ],
+    "research_trends": [
+      "【样例】方法从单一模态走向多模态融合",
+      "【样例】更强调可复现实验与公开评测集",
+      "【样例】效率与落地成本成为重要评价指标"
+    ],
+    "reading_path": [
+      {
+        "step": 1,
+        "paper_ids": [
+          "P1"
+        ],
+        "reason": "【样例】先建立整体印象"
+      },
+      {
+        "step": 2,
+        "paper_ids": [
+          "P2",
+          "P3"
+        ],
+        "reason": "【样例】再读两篇代表性方法"
+      },
+      {
+        "step": 3,
+        "paper_ids": [
+          "P4",
+          "P5"
+        ],
+        "reason": "【样例】最后看应用与局限"
+      }
+    ],
+    "exploration_questions": [
+      "【样例】这些方法在中文语料/本地数据上表现如何？",
+      "【样例】近两年的评测结论是否仍然成立？",
+      "【样例】该方向有哪些公开代码与数据集可供复现？"
+    ],
+    "limitations": "【样例】本文为本地样例；真实报告的检索范围、摘要质量与 AI 归纳均存在局限，请核对原文。"
+  },
+  "report_error": null,
+  "warnings": [
+    "当前为本地样例报告（LLM_PROVIDER=mock），并非模型真实产出。"
+  ],
+  "message": null
+}

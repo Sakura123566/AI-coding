@@ -1,0 +1,63 @@
+{
+  "status": "success",
+  "has_enough_data": false,
+  "sample_size": 4,
+  "version": 1,
+  "updated_at": "2026-09-21T17:19:06Z",
+  "profile": {
+    "domains": [
+      {
+        "name": "图神经网络",
+        "weight": 0.94
+      },
+      {
+        "name": "推荐系统",
+        "weight": 0.847
+      }
+    ],
+    "interests": [
+      {
+        "tag": "图神经网络",
+        "weight": 0.94,
+        "trend": "up"
+      },
+      {
+        "tag": "推荐系统",
+        "weight": 0.847,
+        "trend": "up"
+      }
+    ],
+    "activity": {
+      "total_searches": 1,
+      "total_messages": 3,
+      "active_days": 1,
+      "last_active_at": "2026-09-21T17:19:06Z",
+      "daily_counts": [
+        {
+          "date": "2026-09-21",
+          "n": 4
+        }
+      ]
+    },
+    "style": {
+      "avg_question_len": 16.7,
+      "prefers_chinese": true,
+      "asks_for_papers": 0.33,
+      "summary": ""
+    },
+    "top_keywords": [
+      {
+        "term": "graph neural network",
+        "display": "图神经网络",
+        "weight": 0.94,
+        "times": 3
+      },
+      {
+        "term": "recommender system",
+        "display": "推荐系统",
+        "weight": 0.847,
+        "times": 2
+      }
+    ]
+  }
+}
