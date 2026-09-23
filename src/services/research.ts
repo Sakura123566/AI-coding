@@ -101,7 +101,7 @@ function defaultMsgFor(errorCode: string): string {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000'
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'false') === 'true'
 
 // 字段归一化：后端返回的字段名可能略有差异，这里统一成前端使用的字段。
