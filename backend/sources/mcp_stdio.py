@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -47,8 +48,14 @@ class McpStdioClient:
             "stderr": subprocess.PIPE,
             "text": True,
             "encoding": "utf-8",
+            # 子进程若打印非 UTF-8 字节（Windows 默认 GBK），readline 解码会直接炸掉整条 MCP 链路
+            "errors": "replace",
             "bufsize": 1,
         }
+        # 强制子进程也用 UTF-8 写 stdout（Windows 下 Python 子进程默认跟随系统区域编码）
+        child_env = os.environ.copy()
+        child_env["PYTHONIOENCODING"] = "utf-8"
+        kwargs["env"] = child_env
         if sys.platform.startswith("win"):
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
         try:
