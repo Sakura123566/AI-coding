@@ -1,72 +1,910 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>知识图谱 · 探索</title>
-    <style>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
-      #app { height: 100vh; display: flex; flex-direction: column; }
-      .head { padding: 14px 20px; border-bottom: 1px solid #eef0f2; display: flex; align-items: center; gap: 12px; }
-      .head h1 { font-size: 16px; margin: 0; color: #1f2329; }
-      .head input { width: 240px; padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 8px; font-size: 13px; }
-      .head button { padding: 6px 14px; border: none; border-radius: 8px; background: #2b6cff; color: #fff; cursor: pointer; font-size: 13px; }
-      #chart { flex: 1 1 auto; width: 100%; }
-      .hint { font-size: 12px; color: #9aa0a6; }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <div class="head">
-        <h1>知识图谱</h1>
-        <input id="kw" value="知识图谱" placeholder="输入关键词" />
-        <button id="gen">生成网络</button>
-        <span class="hint">滚轮缩放 · 拖拽平移 · 点击节点查看</span>
-      </div>
-      <div id="chart"></div>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>知识图谱 · 优化版（拖拽 / 滚轮缩放 / 悬停显名 / 分类配色 / 搜索锁定）</title>
+<script src="./echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#f3f5f9; --panel:#fff; --line:#e5e9f0; --ink:#1b2233; --sub:#6c7789;
+    --brand:#2f5fe0; --brand-soft:#eaefff; --gold:#d8961f; --gray:#9aa3b2; --danger:#e2554f;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+       -webkit-font-smoothing:antialiased;}
+  header{background:var(--panel);border-bottom:1px solid var(--line);box-shadow:0 1px 3px rgba(23,40,80,.04);}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:11px 18px;}
+  .tabs{display:flex;gap:4px;background:#f0f2f7;padding:3px;border-radius:11px;}
+  .tab{padding:7px 17px;border-radius:9px;font-size:14px;cursor:pointer;color:var(--sub);transition:.15s;}
+  .tab.on{background:#fff;color:var(--brand);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.07);}
+  .divider{width:1px;height:26px;background:var(--line);}
+  .sub{font-size:13px;color:var(--sub);display:flex;align-items:center;gap:9px;}
+  input[type=text]{padding:7px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;width:148px;outline:none;}
+  input[type=text]:focus{border-color:var(--brand);}
+  textarea{width:196px;height:36px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;resize:none;outline:none;}
+  textarea:focus{border-color:var(--brand);}
+  button{background:var(--brand);color:#fff;border:0;border-radius:9px;padding:8px 14px;font-size:13px;cursor:pointer;transition:.15s;}
+  button:hover{filter:brightness(1.07);}
+  button.ghost{background:var(--brand-soft);color:var(--brand);}
+  button:disabled{opacity:.38;cursor:not-allowed;}
+  select{padding:7px 9px;border:1px solid var(--line);border-radius:9px;font-size:13px;outline:none;}
+  .seg{display:flex;background:#eff1f6;border-radius:10px;padding:3px;}
+  .seg button{background:transparent;color:var(--sub);padding:6px 13px;border-radius:8px;}
+  .seg button.on{background:#fff;color:var(--brand);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  .lbl{font-size:12.5px;color:var(--sub);}
+  main{display:flex;height:calc(100vh - 60px);}
+  .canvas-wrap{flex:1;position:relative;
+    background-color:#fbfcfe;
+    background-image:radial-gradient(#e3e8f1 1px, transparent 1px);
+    background-size:24px 24px;}
+  .canvas{position:absolute;inset:0;}
+  .hidden{display:none!important;}
+
+  /* 浮动工具条（可收起） */
+  .floatbar{position:absolute;right:14px;top:14px;z-index:5;width:184px;
+            background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:13px;padding:11px 12px;
+            box-shadow:0 4px 16px rgba(23,40,80,.10);backdrop-filter:blur(4px);}
+  .fb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
+  .fb-head span{font-size:12.5px;color:var(--sub);font-weight:600;}
+  .fb-head button{width:24px;height:24px;padding:0;font-size:14px;background:#f0f2f7;color:var(--sub);border-radius:7px;}
+  .zoomrow{display:flex;gap:6px;}
+  .zoomrow button{width:34px;height:34px;padding:0;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;}
+  .zoomrow button.wide{width:auto;padding:0 10px;font-size:12.5px;}
+  .tgl{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--sub);cursor:pointer;user-select:none;padding:9px 2px 6px;}
+  .tgl input{width:15px;height:15px;accent-color:var(--brand);}
+  .zoomhint{font-size:11px;color:#aab2c0;line-height:1.6;border-top:1px dashed var(--line);padding-top:8px;}
+  .zoomlvl{font-size:12px;color:var(--brand);font-weight:600;text-align:center;background:#eef2fb;border-radius:8px;padding:5px 0;margin-bottom:8px;}
+  .floatbar-mini{position:absolute;right:14px;top:14px;z-index:6;width:40px;height:40px;border-radius:11px;
+    background:rgba(255,255,255,.94);border:1px solid var(--line);box-shadow:0 4px 16px rgba(23,40,80,.1);
+    font-size:17px;color:var(--brand);cursor:pointer;}
+
+  aside{width:330px;background:var(--panel);border-left:1px solid var(--line);
+        padding:15px;display:flex;flex-direction:column;gap:13px;overflow:auto;}
+  .card{border:1px solid var(--line);border-radius:13px;padding:14px;background:#fff;}
+  .card h3{margin:0 0 10px;font-size:12.5px;color:var(--sub);font-weight:600;
+           letter-spacing:.3px;display:flex;align-items:center;gap:7px;}
+  .card h3::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--brand);}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;}
+  .b-hit{background:#e7f7ef;color:#1f9d77;}
+  .b-gen{background:#fff4e5;color:var(--gold);}
+  .b-lock{background:#fff0d6;color:var(--gold);border:1px solid #f3d79a;}
+  #explainText{font-size:13px;line-height:1.8;min-height:54px;color:#33394a;}
+  .rel{margin-top:11px;border-top:1px dashed var(--line);padding-top:10px;}
+  .rel h4{margin:0 0 7px;font-size:12px;color:var(--sub);font-weight:600;}
+  .rel-item{font-size:12px;line-height:1.65;margin-bottom:6px;color:#4a5160;}
+  .rel-item b{color:var(--brand);font-weight:600;}
+  .navbtns{display:flex;gap:8px;margin-bottom:11px;}
+  .navbtns button{flex:1;padding:7px 0;font-size:12.5px;}
+  .trail{display:flex;flex-direction:column;gap:3px;}
+  .star{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:9px;cursor:pointer;font-size:13px;transition:.12s;}
+  .star:hover{background:#f4f6fa;}
+  .star.active{background:var(--brand-soft);color:var(--brand);font-weight:600;}
+  .sdot{width:11px;height:11px;border-radius:50%;background:#d3d9e3;flex:none;transition:.15s;}
+  .star.visited .sdot{background:#a7bbff;}
+  .star.active .sdot{background:var(--brand);box-shadow:0 0 0 3px #dbe3ff;}
+  .hint{font-size:12px;color:var(--sub);line-height:1.7;}
+  .legend{display:flex;flex-wrap:wrap;gap:11px;font-size:12px;color:var(--sub);}
+  .lg{display:flex;align-items:center;gap:5px;}
+  .lg i{width:10px;height:10px;border-radius:50%;display:inline-block;}
+  .field{margin-bottom:10px;}
+  .field label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px;}
+  .field input[type=text],.field select{width:100%;}
+  .danger{background:#fdecec;color:var(--danger);}
+  .catpill{font-size:11px;padding:2px 9px;border-radius:999px;color:#fff;display:inline-block;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="row">
+    <div class="tabs">
+      <div class="tab on" data-tab="explore">探索型</div>
+      <div class="tab" data-tab="memory">记忆型</div>
     </div>
-    <script src="./echarts.min.js"></script>
-    <script>
-      // 最小化占位图（样例数据）。真实图谱由后端经模型 / embedding 生成。
-      const SAMPLE = {
-        nodes: [
-          { id: 'g', name: '知识图谱', symbolSize: 56, itemStyle: { color: '#2b6cff' }, label: { show: true } },
-          { id: 'rep', name: '知识表示学习', symbolSize: 36, itemStyle: { color: '#2b6cff' } },
-          { id: 'gnn', name: '图神经网络', symbolSize: 36, itemStyle: { color: '#2b6cff' } },
-          { id: 're', name: '关系抽取', symbolSize: 36, itemStyle: { color: '#2b6cff' } },
-          { id: 'fb', name: 'Freebase', symbolSize: 26, itemStyle: { color: '#f59e0b' } },
-          { id: 'wd', name: 'Wikidata', symbolSize: 26, itemStyle: { color: '#f59e0b' } },
-          { id: 'qa', name: '问答系统', symbolSize: 30, itemStyle: { color: '#ef5da8' } },
-          { id: 'te', name: 'TransE', symbolSize: 30, itemStyle: { color: '#19b37d' } },
-          { id: 'ro', name: 'RotatE', symbolSize: 30, itemStyle: { color: '#19b37d' } },
-          { id: 'p1', name: 'TransE (NeurIPS\'13)', symbolSize: 20, itemStyle: { color: '#7c6bff' } },
-          { id: 'p3', name: 'RotatE (ICLR\'19)', symbolSize: 20, itemStyle: { color: '#7c6bff' } }
-        ],
-        links: [
-          { source: 'g', target: 'rep' }, { source: 'g', target: 'gnn' }, { source: 'g', target: 're' },
-          { source: 'g', target: 'fb' }, { source: 'g', target: 'wd' }, { source: 'g', target: 'qa' },
-          { source: 'rep', target: 'te' }, { source: 'rep', target: 'ro' },
-          { source: 'te', target: 'p1' }, { source: 'ro', target: 'p3' }
-        ]
+    <div class="divider"></div>
+
+    <div id="barExplore" class="sub">
+      <input id="kw" type="text" placeholder="输入主题/关键词" value="机器学习" />
+      <button id="genBtn">生成网络</button>
+      <textarea id="article" placeholder="或粘贴文章自动抽词"></textarea>
+      <button class="ghost" id="artBtn">解析文章</button>
+      <div class="seg" id="modeSeg">
+        <button data-mode="web" class="on">蛛网状</button>
+        <button data-mode="radial">放射状</button>
+        <button data-mode="timeline">领域时间线</button>
+      </div>
+      <span class="lbl">口吻</span>
+      <select id="tone"><option value="pro">专业</option><option value="sim">通俗</option></select>
+      <span class="lbl">句数</span>
+      <span class="seg">
+        <button data-len="1">1</button><button data-len="2" class="on">2</button><button data-len="3">3</button>
+      </span>
+    </div>
+
+    <div id="barMemory" class="sub hidden">
+      <div class="seg" id="memModeSeg">
+        <button data-mode="web" class="on">蛛网状</button>
+        <button data-mode="radial">放射状</button>
+      </div>
+      <button id="simTurnBtn">模拟一轮对话</button>
+      <span class="lbl">类型</span>
+      <select id="memFilter">
+        <option value="all">全部</option>
+        <option value="inspiration">只看灵感</option>
+        <option value="casual">只看普通提问</option>
+      </select>
+      <span class="hint">点击节点可编辑 / 删除</span>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sub" id="searchBox">
+      <input id="search" type="text" placeholder="搜索并锁定节点" style="width:170px;" />
+      <button id="searchBtn">锁定</button>
+      <button class="ghost hidden" id="unlockBtn">解锁</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="canvas-wrap">
+    <div id="chartExplore" class="canvas"></div>
+    <div id="chartMemory" class="canvas hidden"></div>
+
+    <div class="floatbar" id="floatbar">
+      <div class="fb-head"><span>视图</span><button id="fbCollapse" title="收起">▾</button></div>
+      <div class="fb-body" id="fbBody">
+        <div class="zoomrow">
+          <button id="zoomIn" title="放大">＋</button>
+          <button id="zoomOut" title="缩小">－</button>
+          <button class="wide" id="zoomReset" title="重置视图（看全图）">适应</button>
+        </div>
+        <div class="zoomlvl" id="zoomLvl">缩放 100%</div>
+        <label class="tgl"><input type="checkbox" id="showAll" /> 显示全部名字</label>
+        <div class="zoomhint">滚轮缩放整图 · 拖拽平移整图（像看相册照片一样）<br/>放大后小节点名字自动显示<br/>悬停节点会浮现其名字，相关节点名字也浮现</div>
+      </div>
+    </div>
+    <button class="floatbar-mini hidden" id="fbExpand" title="展开视图工具">⚙</button>
+  </div>
+
+  <aside id="sideExplore">
+    <div class="card">
+      <h3>关键词解释 <span id="expBadge"></span></h3>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:7px;">
+        当前原点：<b id="curCenter" style="color:var(--brand)">机器学习</b>
+      </div>
+      <div id="explainText">把鼠标悬停在任意节点上，这里显示解释 + 它与相邻网点的关系。</div>
+      <div class="rel hidden" id="relBox"><h4>与相邻网点的关系</h4><div id="relList"></div></div>
+    </div>
+
+    <div class="card">
+      <h3>网络轨迹（回退 / 翻页）</h3>
+      <div class="navbtns">
+        <button id="backBtn" class="ghost">← 回退</button>
+        <button id="fwdBtn" class="ghost">翻页 →</button>
+      </div>
+      <div class="trail" id="trail"></div>
+      <div class="hint" id="trailInfo" style="margin-top:9px;"></div>
+    </div>
+
+    <div class="card">
+      <h3>图例 · 类型配色</h3>
+      <div class="legend" id="legendBox"></div>
+      <div class="hint" style="margin-top:9px;">
+        同一类型按<strong>重要程度</strong>深浅变化：越深越重要。<br/>
+        默认只显示大节点名字；勾选「显示全部名字」或放大到阈值后，小节点名字也会显示，避免重叠。
+      </div>
+    </div>
+  </aside>
+
+  <aside id="sideMemory" class="hidden">
+    <div class="card">
+      <h3>记忆节点</h3>
+      <div class="hint" id="memTip">点击图中节点，在此编辑标题 / 类型 / 状态，或删除无用信息。</div>
+    </div>
+    <div class="card" id="memEditCard" style="display:none;">
+      <h3>编辑节点</h3>
+      <div class="field"><label>标题</label><input type="text" id="memLabel" /></div>
+      <div class="field"><label>类型</label>
+        <select id="memType">
+          <option value="phase">对话阶段</option>
+          <option value="inspiration">灵感</option>
+          <option value="casual">普通提问</option>
+        </select></div>
+      <div class="field"><label>状态</label>
+        <select id="memStatus">
+          <option value="confirmed">有效</option>
+          <option value="draft">待更新</option>
+          <option value="deprecated">已废弃</option>
+        </select></div>
+      <div style="display:flex;gap:8px;">
+        <button id="memSave" style="flex:1;">保存</button>
+        <button id="memDel" class="danger">删除</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>图例 · 类型配色</h3>
+      <div class="legend" id="memLegendBox" style="flex-direction:column;gap:7px;"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ============================ mock 数据 ============================ */
+const KG = {
+  '机器学习':[['神经网络',.92],['决策树',.85],['强化学习',.81],['聚类',.78],['特征工程',.74],['支持向量机',.70],['贝叶斯',.66]],
+  '神经网络':[['深度学习',.90],['反向传播',.82],['激活函数',.78],['感知机',.70]],
+  '决策树':[['信息增益',.85],['随机森林',.80],['剪枝',.72]],
+  '强化学习':[['Q学习',.88],['策略梯度',.80],['奖励函数',.76],['马尔可夫决策',.70]],
+  '聚类':[['KMeans',.85],['层次聚类',.75],['DBSCAN',.70]],
+  '支持向量机':[['核函数',.85],['最大间隔',.80],['软间隔',.72]],
+  '特征工程':[['特征选择',.82],['归一化',.75],['独热编码',.70]],
+  '贝叶斯':[['朴素贝叶斯',.85],['贝叶斯网络',.78],['先验概率',.70]],
+  '深度学习':[['CNN',.85],['RNN',.80],['Transformer',.78]],
+};
+function childrenOf(n){
+  return KG[n] || ['核心原理','典型应用','发展历程','关联技术','代表模型'].map((s,i)=>[n+'·'+s,.78-i*.07]);
+}
+
+const BANK = {
+  '神经网络':{pro:['神经网络是由大量人工神经元分层连接构成的非线性模型，借反向传播优化权重以逼近复杂映射。','激活函数引入非线性，使其具备逼近任意连续函数的能力。','深层结构形成层次化特征表示，是深度学习的方法论基础。'],
+             sim:['神经网络是模仿人脑的一种模型，由许多小单元连在一起。','它会通过学习不断调整，用来识别或预测事情。','一层层的结构让它慢慢学会抓重点。']},
+  '支持向量机':{pro:['支持向量机通过寻找最大间隔超平面实现分类，并借核函数把线性不可分问题映射到高维空间。','软间隔允许少量错分以提升泛化。','其解由少数支持向量决定，具有稀疏性。'],
+             sim:['支持向量机就是画一条最“宽敞”的分界线来分类。','如果分不开，就用核函数把数据“抬高”再分。','它只靠少数关键点决定分界线。']},
+};
+
+const DOMAIN = {
+  keyword:'图神经网络 (GNN)',
+  spine:[
+    {year:2017,label:'GCN 图卷积',    off:['谱图卷积','消息传递']},
+    {year:2018,label:'GraphSAGE',     off:['邻居采样','归纳学习']},
+    {year:2019,label:'GAT 图注意力',  off:['注意力权重','多头机制']},
+    {year:2020,label:'深层 GNN',      off:['过平滑','子图采样']},
+    {year:2022,label:'Transformer≈GNN',off:['自注意力等价','位置编码']},
+    {year:2024,label:'大图模型',      off:['可扩展性','管道并行']},
+  ]
+};
+
+let MEMORY = {
+  nodes:[
+    {id:'m1',label:'阶段1 提出知识图谱构想',type:'phase',status:'confirmed',imp:1.0},
+    {id:'m2',label:'灵感：回退与星星图合并',type:'inspiration',status:'confirmed',imp:0.8},
+    {id:'m3',label:'普通提问：DeepSeek 计费',type:'casual',status:'confirmed',imp:0.6},
+    {id:'m4',label:'阶段2 敲定技术路线',type:'phase',status:'confirmed',imp:0.95},
+    {id:'m5',label:'灵感：时间线用引用溯源',type:'inspiration',status:'confirmed',imp:0.75},
+    {id:'m6',label:'阶段3 原型迭代与接口对齐',type:'phase',status:'draft',imp:0.7},
+  ],
+  edges:[['m1','m2'],['m1','m3'],['m1','m4'],['m4','m5'],['m4','m6'],['m2','m6']]
+};
+
+/* ============================ 分类 / 配色 ============================ */
+const CATEGORIES = {
+  '模型架构':{h:218}, '学习算法':{h:276}, '数学基础':{h:162},
+  '特征工程':{h:34}, '评估应用':{h:350}, '通用衍生':{h:205},
+};
+function inferCategory(name){
+  const m = {
+    '模型架构':['神经网络','深度学习','CNN','RNN','Transformer','感知机','图','GCN','GraphSAGE','GAT','卷积','注意力','网络'],
+    '学习算法':['决策树','随机森林','聚类','KMeans','层次','DBSCAN','强化','Q学习','策略梯度','贝叶斯','支持向量','SVM'],
+    '数学基础':['反向传播','激活','核函数','最大间隔','软间隔','先验','信息增益','剪枝','奖励','马尔可夫','概率','图谱卷积','消息传递','过平滑','位置编码','自注意力'],
+    '特征工程':['特征','归一化','独热','编码'],
+    '评估应用':['应用','可扩展性','管道','并行','发展'],
+  };
+  for(const k in m){ for(const kw of m[k]){ if(name.indexOf(kw)>=0) return k; } }
+  return '通用衍生';
+}
+function colorFor(cat, imp){
+  const h = (CATEGORIES[cat] || CATEGORIES['通用衍生']).h;
+  const l = Math.round(72 - Math.max(0,Math.min(1,imp))*36);
+  return `hsl(${h} 60% ${l}%)`;
+}
+function legendColor(cat){ const h=(CATEGORIES[cat]||CATEGORIES['通用衍生']).h; return `hsl(${h} 60% 50%)`; }
+
+/* ============================ 视图状态 ============================ */
+const LABEL_ZOOM = 1.7;
+let S = { tab:'explore', mode:'web', memMode:'web', center:'机器学习', tone:'pro', len:2,
+          trail:['机器学习'], idx:0, memFilter:'all', memSel:null,
+          showAll:false,
+          scaleE:1, offE:{x:0,y:0}, scaleM:1, offM:{x:0,y:0}, locked:null };
+const chartE = echarts.init(document.getElementById('chartExplore'));
+const chartM = echarts.init(document.getElementById('chartMemory'));
+const TYPE_COLOR = { phase:'#2f5fe0', inspiration:'#e0a12b', casual:'#9aa3b2' };
+
+function curScale(which){ return which==='E' ? S.scaleE : S.scaleM; }
+function curOff(which){ return which==='E' ? S.offE : S.offM; }
+
+function applyView(bx, by, which){
+  const chart = which==='E'?chartE:chartM;
+  const W = chart.getWidth(), H = chart.getHeight();
+  const s = curScale(which), o = curOff(which);
+  return { x:(bx - W/2)*s + W/2 + o.x, y:(by - H/2)*s + H/2 + o.y };
+}
+function labelVisible(level, which){
+  if(S.showAll) return true;
+  if(level <= 1) return true;
+  return curScale(which) >= LABEL_ZOOM;
+}
+
+function circleNode(id, label, level, bx, by, cat, imp, which, opt){
+  opt = opt || {};
+  const sz = [46,30,22,17][Math.min(level,3)];
+  const locked = (S.locked === id);
+  const dim = (S.locked && !locked && !(opt.neighbor));
+  const baseColor = opt.color || colorFor(cat, imp);
+  const show = (opt.forceLabel !== undefined) ? opt.forceLabel : labelVisible(level, which);
+  return {
+    name:id, level, category:cat, importance:imp,
+    symbol:'circle', symbolSize:sz, x:bx, y:by,
+    itemStyle:{ color: baseColor,
+                borderColor: locked ? '#d8961f' : '#fff',
+                borderWidth: locked ? 4 : 2,
+                opacity: dim ? 0.22 : 1,
+                shadowBlur: locked ? 16 : 9,
+                shadowColor: locked ? 'rgba(216,150,31,.45)' : 'rgba(40,70,150,.18)' },
+    label:{ show: show,
+            formatter:function(){ return label; },
+            position: opt.lpos || 'bottom', distance: opt.ldist || 8,
+            fontSize: level===0 ? 13 : 11.5,
+            fontWeight: (level===0 || locked) ? 600 : 400,
+            color: opt.labelColor || (level===0 ? '#1b2233' : '#414c60'),
+            opacity: dim ? 0.3 : 1,
+            textBorderColor:'#fff', textBorderWidth:3.5 }
+  };
+}
+
+/* ============================ 俯视几何布局（居中于原点） ============================ */
+function radialTree(rootId, kids, W, H){
+  const cx = W/2, cy = H/2, Rmax = Math.min(W,H)*0.42;
+  const dep = {};
+  (function walk(id, d){
+    if(dep[id] !== undefined) return;
+    dep[id] = d;
+    (kids[id] || []).forEach(c => walk(c, d+1));
+  })(rootId, 0);
+  const maxD = Math.max.apply(null, Object.keys(dep).map(k => dep[k]).concat([1]));
+  const rad = d => d===0 ? 0 : (Rmax*0.30) + (Rmax*0.70)*Math.pow(d/maxD, 0.85);
+  const pos = {}, ang = {};
+  (function place(id, d, a0, a1){
+    const a = (a0 + a1)/2;
+    pos[id] = { x: cx + rad(d)*Math.cos(a), y: cy + rad(d)*Math.sin(a) };
+    ang[id] = a;
+    const cs = (kids[id] || []).filter(c => pos[c] === undefined);
+    if(!cs.length) return;
+    const total = a1 - a0, span = total*0.86, start = a0 + (total - span)/2;
+    cs.forEach((c,i) => place(c, d+1, start + span*(i/cs.length), start + span*((i+1)/cs.length)));
+  })(rootId, 0, -Math.PI/2, -Math.PI/2 + Math.PI*2);
+  return { pos:pos, ang:ang, dep:dep, maxD:maxD, cx:cx, cy:cy };
+}
+function ringThreads(nodes, rt){
+  const byL = {};
+  nodes.forEach(n => { const d = rt.dep[n.id] || 0; (byL[d] = byL[d] || []).push(n.id); });
+  const out = [];
+  Object.keys(byL).forEach(k => {
+    const d = +k;
+    if(d === 0) return;
+    const arr = byL[k].filter(id => rt.pos[id])
+      .map(id => ({ id:id, a:Math.atan2(rt.pos[id].y - rt.cy, rt.pos[id].x - rt.cx) }))
+      .sort((p,q) => p.a - q.a);
+    if(arr.length < 2) return;
+    for(let i=0; i<arr.length; i++){
+      const A = arr[i], B = arr[(i+1)%arr.length];
+      let gap = B.a - A.a;
+      if(gap <= 0) gap += Math.PI*2;
+      if(gap < 1.15) out.push({ source:A.id, target:B.id });
+    }
+  });
+  return out;
+}
+
+/* ============================ 探索型 ============================ */
+function buildTree(center, perLevel, maxDepth, cap){
+  const nodes = [{id:center, level:0, cat:inferCategory(center), imp:1}], links = [], seen = new Set([center]);
+  let frontier = [center];
+  for(let d=1; d<=maxDepth; d++){
+    const b = perLevel[d-1] || 2, next = [];
+    for(const p of frontier){
+      let cnt = 0;
+      for(const it of childrenOf(p)){
+        if(nodes.length >= cap) break;
+        if(cnt >= b) break;
+        const nm = it[0], score = it[1];
+        if(seen.has(nm)) continue;
+        seen.add(nm);
+        nodes.push({id:nm, level:d, cat:inferCategory(nm), imp:score});
+        links.push({source:p, target:nm, score:score});
+        next.push(nm); cnt++;
       }
-      const chart = echarts.init(document.getElementById('chart'))
-      function render() {
-        chart.setOption({
-          tooltip: { show: true },
-          series: [{
-            type: 'graph', layout: 'force', roam: true, draggable: true,
-            data: SAMPLE.nodes, links: SAMPLE.links,
-            label: { show: true, position: 'right', color: '#414c60', fontSize: 12 },
-            lineStyle: { color: '#a9bcd8', width: 1.2, opacity: 0.55 },
-            emphasis: { focus: 'adjacency' },
-            force: { repulsion: 320, edgeLength: 120 }
-          }]
-        })
-      }
-      render()
-      document.getElementById('gen').onclick = render
-      window.addEventListener('resize', () => chart.resize())
-    </script>
-  </body>
+    }
+    frontier = next;
+    if(!frontier.length) break;
+  }
+  return { nodes:nodes, links:links };
+}
+
+let EXP = null, TL = null, MEMOBJ = null;
+let hoverE = null, hoverM = null;
+
+function computeExplore(){
+  const W=chartE.getWidth(), H=chartE.getHeight();
+  const built = buildTree(S.center, [5,2,2], 3, 34);
+  const kids = {}; built.nodes.forEach(n => kids[n.id] = []);
+  built.links.forEach(l => { if(kids[l.source]) kids[l.source].push(l.target); });
+  const rt = radialTree(S.center, kids, W, H);
+  const rings = (S.mode==='web') ? ringThreads(built.nodes, rt) : [];
+  const adj = {};
+  built.links.forEach(l => { (adj[l.source]=adj[l.source]||new Set()).add(l.target); (adj[l.target]=adj[l.target]||new Set()).add(l.source); });
+  const base = built.nodes.map(n => { const bp = rt.pos[n.id]; return bp ? {id:n.id, level:rt.dep[n.id]||0, cat:n.cat, imp:n.imp, bx:bp.x, by:bp.y} : null; }).filter(Boolean);
+  EXP = { built, base, links:built.links, rings, adj };
+}
+function paintExplore(hover, merge){
+  if(!EXP) computeExplore();
+  const neighbors = hover ? (EXP.adj[hover] || new Set()) : new Set();
+  const lockedNeighbors = new Set();
+  if(S.locked) EXP.links.forEach(l => { if(l.source===S.locked) lockedNeighbors.add(l.target); if(l.target===S.locked) lockedNeighbors.add(l.source); });
+  const nData = EXP.base.map(n => {
+    const show = labelVisible(n.level,'E') || (hover && (n.id===hover || neighbors.has(n.id)));
+    return circleNode(n.id, n.id, n.level, n.bx, n.by, n.cat, n.imp, 'E', { neighbor: lockedNeighbors.has(n.id), forceLabel: show });
+  });
+  const spoke = EXP.links.map(l => ({
+    source:l.source, target:l.target,
+    lineStyle:{ width: 0.8 + l.score*3.2, opacity: (S.locked && l.source!==S.locked && l.target!==S.locked)?0.12:0.5 + l.score*0.35, color:'#a9bcd8' }
+  }));
+  const ring = EXP.rings.map(r => ({
+    source:r.source, target:r.target,
+    lineStyle:{ width:0.9, opacity:(S.locked?0.1:0.7), color:'#cbd8ec' }
+  }));
+  // 必须用 notMerge（replace）重绘：ECharts 在浏览器中 merge 模式不会重新渲染 graph 节点的
+  // label.show 开关（round 11 实测名字不浮现），放大后小节点名字因此不显示。改用 notMerge 强制重绘标签。
+  // 视图保持：zoom 用自跟踪的 S.scaleE（getOption().zoom 在 roam 后恒为 1 不可靠）；
+  // center 故意省略 —— 让 left/right/top/bottom 盒模型自动居中。上一轮显式传 center:[W/2,H/2]
+  // 与该盒模型冲突，把整图推出屏幕（"图谱消失"真因）。平移(拖拽)会在重绘时复位到居中，属已知取舍。
+  const zw = curScale('E');
+  chartE.setOption({
+    animation:false, tooltip:{ show:false },
+    series:[{ type:'graph', layout:'none', roam:true, draggable:false,
+      zoom: zw,
+      data:nData, links: spoke.concat(ring), emphasis:{ focus:'adjacency', scale:1.08 },
+      left:'2%', right:'2%', top:'6%', bottom:'6%' }]
+  }, !merge);
+  chartE.off('mouseover'); chartE.off('mouseout'); chartE.off('click');
+  chartE.on('mouseover', p => { if(p.dataType==='node'){ hoverE=p.name; showExplain(p.name); paintExplore(p.name, false); } });
+  chartE.on('mouseout', p => { if(p.dataType==='node'){ hoverE=null; paintExplore(null, false); } });
+  chartE.on('click', p => { if(p.dataType==='node'){ if(p.name!==S.center) setCenter(p.name, 'drill'); } });
+}
+function renderExplore(){
+  document.getElementById('curCenter').textContent = S.center;
+  if(S.mode === 'timeline'){ renderTimeline(); return; }
+  computeExplore(); paintExplore(null, false); renderTrail();
+}
+
+function computeTimeline(){
+  const W=chartE.getWidth(), H=chartE.getHeight();
+  const cx=W/2, cy=H/2;
+  const sp=DOMAIN.spine;
+  const minY=Math.min.apply(null, sp.map(s=>s.year));
+  const spanY=(Math.max.apply(null, sp.map(s=>s.year)) - minY) || 1;
+  const padX=118, usable=Math.max(W-2*padX, 200), amp=Math.min(80, H*0.15);
+  const idOf = it => 'sp_' + it.label;
+  const nodes=[], links=[];
+  const pts = sp.map((it, i) => ({ x: padX + ((it.year - minY)/spanY)*usable, y: cy + (i%2 ? amp : -amp) }));
+  sp.forEach((it, i) => {
+    const pt = pts[i], id = idOf(it);
+    nodes.push({ id:id, label: it.label + ' · ' + it.year, level:0, bx:pt.x, by:pt.y, cat:'模型架构', imp:1, color:'#2f5fe0' });
+    if(i > 0) links.push({ source: idOf(sp[i-1]), target: id, lineStyle:{ width:3.2, color:'#3b6cff', opacity:.9 } });
+    const upward = pt.y < cy, base = upward ? -Math.PI/2 : Math.PI/2;
+    it.off.forEach((o, j) => {
+      const cid = 'off_' + it.label + '_' + o, a = base + (j - (it.off.length-1)/2)*0.60, r = 88 + (j%2)*20;
+      const ox = pt.x + r*Math.cos(a), oy = pt.y + r*Math.sin(a);
+      nodes.push({ id:cid, label:o, level:2, bx:ox, by:oy, cat:inferCategory(o), imp:0.7, color:'#8fb0f2' });
+      links.push({ source:id, target:cid, lineStyle:{ width:1.4, color:'#a6bce0', opacity:.85 } });
+    });
+  });
+  const adj = {};
+  links.forEach(l => { (adj[l.source]=adj[l.source]||new Set()).add(l.target); (adj[l.target]=adj[l.target]||new Set()).add(l.source); });
+  TL = { nodes, links, adj };
+}
+function paintTimeline(hover, merge){
+  if(!TL) computeTimeline();
+  const neighbors = hover ? (TL.adj[hover] || new Set()) : new Set();
+  const nData = TL.nodes.map(n => {
+    const show = labelVisible(n.level,'E') || (hover && (n.id===hover || neighbors.has(n.id)));
+    return circleNode(n.id, n.label, n.level, n.bx, n.by, n.cat, n.imp, 'E', { color:n.color, forceLabel: show });
+  });
+  // notMerge 重绘（理由同 paintExplore）：强制重渲染标签；zoom 自跟踪、center 省略由盒模型居中
+  const zw = curScale('E');
+  chartE.setOption({
+    animation:false, tooltip:{ show:false },
+    series:[{ type:'graph', layout:'none', roam:true, draggable:false,
+      zoom: zw,
+      data:nData, links:TL.links, emphasis:{ focus:'adjacency', scale:1.08 },
+      left:'1%', right:'1%', top:'10%', bottom:'10%' }]
+  }, !merge);
+  chartE.off('mouseover'); chartE.off('mouseout'); chartE.off('click');
+  chartE.on('mouseover', p => { if(p.dataType==='node'){ hoverE=p.name; showExplain(p.name); paintTimeline(p.name, false); } });
+  chartE.on('mouseout', p => { if(p.dataType==='node'){ hoverE=null; paintTimeline(null, false); } });
+  chartE.on('click', p => { if(p.dataType==='node'){ } });
+}
+function renderTimeline(){ computeTimeline(); paintTimeline(null, false); }
+
+/* ============================ 解释 + 相邻关系 ============================ */
+const cache = {};
+function explainText(name, tone, len){
+  const B = BANK[name];
+  const arr = (B && B[tone]) ? B[tone] : (tone === 'pro'
+    ? [name+'是该知识域中的核心概念，具备明确的形式化定义与可计算性质。',
+       name+'常作为关键模块参与整体推理或计算流程。',
+       name+'的深入研究可延伸至更细分的子方向与交叉应用。']
+    : [name+'就是这块内容里一个挺重要的概念。',
+       name+'平时会和其他内容配合起来起作用。',
+       name+'想深入的话可以往更细的分支去看看。']);
+  return arr.slice(0, len).join('');
+}
+function showExplain(name){
+  const box = document.getElementById('explainText');
+  const badge = document.getElementById('expBadge');
+  if(S.locked === name){ renderLockCard(name); return; }
+  const key = name + '|' + S.tone + '|' + S.len;
+  if(!cache[key]){ box.textContent = '⏳ 生成中…'; badge.innerHTML = ''; }
+  const run = (txt, hit) => {
+    box.textContent = txt;
+    badge.innerHTML = hit ? '<span class="badge b-hit">命中缓存</span>' : '<span class="badge b-gen">已生成并缓存</span>';
+    renderRelation(name);
+  };
+  if(cache[key]) run(cache[key], true);
+  else setTimeout(() => { const t = explainText(name, S.tone, S.len); cache[key] = t; run(t, false); }, 280);
+}
+function renderRelation(name){
+  const box = document.getElementById('relBox'), list = document.getElementById('relList');
+  let out = [], inn = [];
+  if(S.tab === 'explore' && S.mode !== 'timeline'){
+    const built = buildTree(S.center, [5,2,2], 3, 34);
+    built.links.forEach(e => {
+      if(e.source === name && out.indexOf(e.target) < 0) out.push(e.target);
+      if(e.target === name && inn.indexOf(e.source) < 0) inn.push(e.source);
+    });
+  }
+  if(!out.length && !inn.length){ box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  list.innerHTML = inn.map(p => '<div class="rel-item">从属：<b>'+p+'</b> → <b>'+name+'</b></div>').join('')
+                 + out.map(c => '<div class="rel-item">延伸：<b>'+name+'</b> → <b>'+c+'</b></div>').join('');
+}
+
+/* ============================ 轨迹 ============================ */
+function renderTrail(){
+  const el = document.getElementById('trail'); el.innerHTML = '';
+  S.trail.forEach((nm, i) => {
+    const d = document.createElement('div');
+    d.className = 'star ' + (i === S.idx ? 'active' : 'visited');
+    d.innerHTML = '<span class="sdot"></span><span>' + (i+1) + '. ' + nm + '</span>';
+    d.onclick = () => { S.idx = i; S.center = S.trail[i]; renderExplore(); };
+    el.appendChild(d);
+  });
+  document.getElementById('backBtn').disabled = S.idx <= 0;
+  document.getElementById('fwdBtn').disabled = S.idx >= S.trail.length - 1;
+  document.getElementById('trailInfo').textContent = '第 ' + (S.idx+1) + ' / ' + S.trail.length + ' 层。回退=退一步；翻页=在轨迹里前进或点上方任意层。';
+}
+function setCenter(name, mode){
+  if(mode === 'init'){ S.trail = [name]; S.idx = 0; }
+  else if(mode === 'drill'){ S.trail = S.trail.slice(0, S.idx+1); S.trail.push(name); S.idx = S.trail.length - 1; }
+  S.center = S.trail[S.idx];
+  renderExplore();
+}
+
+/* ============================ 记忆型 ============================ */
+function spanningTree(rootId, allIds, pairs){
+  const adj = {};
+  allIds.forEach(id => adj[id] = []);
+  pairs.forEach(pr => { if(adj[pr[0]] && adj[pr[1]]){ adj[pr[0]].push(pr[1]); adj[pr[1]].push(pr[0]); } });
+  const seen = new Set([rootId]), q = [rootId], order = [rootId], links = [];
+  while(q.length){
+    const u = q.shift();
+    for(const v of (adj[u] || [])){
+      if(seen.has(v)) continue;
+      seen.add(v); order.push(v); links.push({source:u, target:v, score:.7}); q.push(v);
+    }
+  }
+  allIds.forEach(id => { if(!seen.has(id) && id !== rootId){ seen.add(id); order.push(id); links.push({source:rootId, target:id, score:.5}); } });
+  return { order:order, links:links };
+}
+function computeMemory(){
+  const f = S.memFilter;
+  const list = MEMORY.nodes.filter(n => f === 'all' || n.type === f);
+  const ids = list.map(n => n.id), idSet = new Set(ids);
+  const pairs = MEMORY.edges.filter(pr => idSet.has(pr[0]) && idSet.has(pr[1]));
+  const rootNode = list.find(n => n.type === 'phase') || list[0];
+  const st = spanningTree(rootNode.id, ids, pairs);
+  const kids = {}; ids.forEach(id => kids[id] = []);
+  st.links.forEach(l => { if(kids[l.source]) kids[l.source].push(l.target); });
+  const W = chartM.getWidth(), H = chartM.getHeight();
+  const rt = radialTree(rootNode.id, kids, W, H);
+  const rings = (S.memMode === 'web') ? ringThreads(list.map(n => ({id:n.id})), rt) : [];
+  const labelOf = {}, colorOf = {}, impOf = {};
+  list.forEach(n => { labelOf[n.id] = n.label; colorOf[n.id] = TYPE_COLOR[n.type] || '#9aa3b2'; impOf[n.id] = n.imp != null ? n.imp : 0.6; });
+  const base = st.order.filter(id => rt.pos[id]).map(id => ({ id, level: rt.dep[id]||0, bx: rt.pos[id].x, by: rt.pos[id].y, cat: list.find(n=>n.id===id).type, imp: impOf[id], label: labelOf[id], color: colorOf[id] }));
+  const adj = {};
+  st.links.forEach(l => { (adj[l.source]=adj[l.source]||new Set()).add(l.target); (adj[l.target]=adj[l.target]||new Set()).add(l.source); });
+  MEMOBJ = { base, links: st.links, rings, adj };
+}
+function paintMemory(hover, merge){
+  if(!MEMOBJ) computeMemory();
+  const neighbors = hover ? (MEMOBJ.adj[hover] || new Set()) : new Set();
+  const lockedNeighbors = new Set();
+  if(S.locked) MEMOBJ.links.forEach(l => { if(l.source===S.locked) lockedNeighbors.add(l.target); if(l.target===S.locked) lockedNeighbors.add(l.source); });
+  const nData = MEMOBJ.base.map(n => {
+    const show = labelVisible(n.level,'M') || (hover && (n.id===hover || neighbors.has(n.id)));
+    return circleNode(n.id, n.label, n.level, n.bx, n.by, n.cat, n.imp, 'M', { color: n.color, neighbor: lockedNeighbors.has(n.id), forceLabel: show });
+  });
+  const links = MEMOBJ.links.map(l => ({
+    source:l.source, target:l.target,
+    lineStyle:{ width:1.7, color:'#c3cbdb', opacity:(S.locked && l.source!==S.locked && l.target!==S.locked)?0.12:.9 }
+  })).concat(MEMOBJ.rings.map(r => ({
+    source:r.source, target:r.target,
+    lineStyle:{ width:0.8, color:'#dee4ef', opacity:(S.locked?0.1:.6) }
+  })));
+  // notMerge 重绘（理由同 paintExplore）：强制重渲染标签；zoom 自跟踪、center 省略由盒模型居中
+  const zw = curScale('M');
+  chartM.setOption({
+    animation:false, tooltip:{show:false},
+    series:[{ type:'graph', layout:'none', roam:true, draggable:false, zoom: zw, data:nData, links:links, emphasis:{ focus:'adjacency' } }]
+  }, !merge);
+  chartM.off('click'); chartM.off('mouseover'); chartM.off('mouseout');
+  chartM.on('click', p => { if(p.dataType==='node'){ const n = MEMORY.nodes.find(x => x.id === p.name); if(n) openMemEdit(n); } });
+  chartM.on('mouseover', p => { if(p.dataType==='node'){ hoverM=p.name; paintMemory(p.name, false); } });
+  chartM.on('mouseout', p => { if(p.dataType==='node'){ hoverM=null; paintMemory(null, false); } });
+}
+function renderMemory(){ computeMemory(); paintMemory(null, false); }
+
+function openMemEdit(n){
+  S.memSel = n.id;
+  document.getElementById('memEditCard').style.display = 'block';
+  document.getElementById('memLabel').value = n.label;
+  document.getElementById('memType').value = n.type;
+  document.getElementById('memStatus').value = n.status;
+}
+document.getElementById('memSave').onclick = () => {
+  const n = MEMORY.nodes.find(x => x.id === S.memSel); if(!n) return;
+  n.label = document.getElementById('memLabel').value || n.label;
+  n.type = document.getElementById('memType').value;
+  n.status = document.getElementById('memStatus').value;
+  renderMemory();
+};
+document.getElementById('memDel').onclick = () => {
+  MEMORY.nodes = MEMORY.nodes.filter(x => x.id !== S.memSel);
+  MEMORY.edges = MEMORY.edges.filter(pr => pr[0] !== S.memSel && pr[1] !== S.memSel);
+  S.memSel = null;
+  document.getElementById('memEditCard').style.display = 'none';
+  renderMemory();
+};
+document.getElementById('memFilter').onchange = e => { S.memFilter = e.target.value; renderMemory(); };
+document.getElementById('simTurnBtn').onclick = () => {
+  const id = 'm' + (MEMORY.nodes.length + 1) + '_' + Date.now();
+  MEMORY.nodes.push({ id:id, label:'新节点 一段新的对话记忆', type:'casual', status:'draft', imp:0.5 });
+  const phases = MEMORY.nodes.filter(x => x.type === 'phase');
+  const last = phases[phases.length - 1];
+  MEMORY.edges.push([last ? last.id : 'm1', id]);
+  renderMemory();
+};
+
+/* ============================ 缩放 / 平移 / 拖动节点 ============================ */
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function zoomCenter(factor, which){
+  const chart = which==='E'?chartE:chartM;
+  animateScale(curScale(which)*factor, chart.getWidth()/2, chart.getHeight()/2, which, 180);
+}
+function resetView(which){
+  animateScale(1, 0, 0, which, 200, {x:0,y:0});
+}
+let rafE=null, rafM=null;
+function scheduleRender(which){
+  if(which==='E'){
+    if(rafE) return; rafE = requestAnimationFrame(()=>{ rafE=null; if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } updateZoomLvl(); });
+  } else {
+    if(rafM) return; rafM = requestAnimationFrame(()=>{ rafM=null; if(S.tab==='memory') paintMemory(null,false); updateZoomLvl(); });
+  }
+}
+function updateZoomLvl(){ const el=document.getElementById('zoomLvl'); if(el) el.textContent='缩放 '+Math.round((S.tab==='explore'?S.scaleE:S.scaleM)*100)+'%'; }
+function paintNow(which){
+  if(which==='E'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); }
+  else paintMemory(null,false);
+  updateZoomLvl();
+}
+/* 平滑缩放动画（相册式手感） */
+function animateScale(targetScale, mx, my, which, dur, targetOff){
+  const chart = which==='E'?chartE:chartM;
+  const W=chart.getWidth(), H=chart.getHeight(), cx=W/2, cy=H/2;
+  const s0=curScale(which), o0={x:curOff(which).x, y:curOff(which).y};
+  const s1=clamp(targetScale,0.4,6);
+  let o1;
+  if(targetOff){ o1={x:targetOff.x, y:targetOff.y}; }
+  else { const baseX=(mx-cx-o0.x)/s0, baseY=(my-cy-o0.y)/s0; o1={x:mx-cx-baseX*s1, y:my-cy-baseY*s1}; }
+  const t0=performance.now();
+  (function step(t){
+    const k=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-k,3);
+    const s=s0+(s1-s0)*e, ox=o0.x+(o1.x-o0.x)*e, oy=o0.y+(o1.y-o0.y)*e;
+    if(which==='E'){ S.scaleE=s; S.offE={x:ox,y:oy}; } else { S.scaleM=s; S.offM={x:ox,y:oy}; }
+    paintNow(which);
+    if(k<1) requestAnimationFrame(step);
+  })(t0);
+}
+function bindView(chart, which){
+  const dom = chart.getDom();
+  dom.style.cursor = 'grab';
+  // 整图平移 + 以光标为中心滚轮缩放 由 ECharts 原生 roam 完成；
+  // 这里仅自跟踪缩放值 S.scale*（每格 ×1.12），用来驱动「标签阈值 / 缩放%」显示。
+  // 注：graph series roam 后 getOption().series[0].zoom 不可靠（恒为 1），故不读回、改为自累积。
+  let zt = null;
+  dom.addEventListener('wheel', e => {
+    const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
+    if(which==='E') S.scaleE = clamp(S.scaleE*factor, 0.4, 6); else S.scaleM = clamp(S.scaleM*factor, 0.4, 6);
+    updateZoomLvl();
+    if(zt) clearTimeout(zt);
+    zt = setTimeout(() => {
+      // 缩放足够大时让小节点名字浮现（merge 重绘，保留 roam 平移/缩放状态）
+      if(which==='E'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); }
+      else paintMemory(null,false);
+    }, 90);
+  }, {passive:true});
+}
+bindView(chartE, 'E');
+bindView(chartM, 'M');
+
+/* 同步原生 roam 的真实缩放值到 S.scale*：getOption().zoom 在 roam 后恒为 1 不可靠，
+   但 roam 事件会携带当前真实 zoom；用它驱动标签阈值与缩放%，并使重绘 notMerge 写回的
+   zoom 与可视缩放一致，避免「原生灵敏度≠自累积 1.12」造成的跳变。 */
+function bindRoamSync(chart, which){
+  chart.on('roam', params => {
+    if(params && typeof params.zoom === 'number'){
+      if(which==='E') S.scaleE = clamp(params.zoom, 0.4, 6);
+      else S.scaleM = clamp(params.zoom, 0.4, 6);
+      updateZoomLvl();
+    }
+  });
+}
+bindRoamSync(chartE, 'E');
+bindRoamSync(chartM, 'M');
+
+/* ============================ 搜索锁定 ============================ */
+function recordSearch(q, name){
+  try{ const a = JSON.parse(localStorage.getItem('kg_search_records') || '[]'); a.push({ q:q, name:name, t:Date.now() }); localStorage.setItem('kg_search_records', JSON.stringify(a.slice(-500))); }catch(e){}
+}
+function findNode(query){
+  const q = (query||'').trim().toLowerCase();
+  if(!q) return null;
+  if(S.tab === 'explore'){
+    const built = buildTree(S.center, [5,2,2], 3, 34);
+    return (built.nodes.find(n => n.id.toLowerCase() === q)
+         || built.nodes.find(n => n.id.toLowerCase().startsWith(q))
+         || built.nodes.find(n => n.id.toLowerCase().indexOf(q) >= 0))?.id || null;
+  } else {
+    const list = MEMORY.nodes;
+    return (list.find(n => n.label.toLowerCase() === q)
+         || list.find(n => n.label.toLowerCase().startsWith(q))
+         || list.find(n => n.label.toLowerCase().indexOf(q) >= 0))?.id || null;
+  }
+}
+function doSearch(){
+  const q = document.getElementById('search').value;
+  const id = findNode(q);
+  const ub = document.getElementById('unlockBtn');
+  if(!id){ document.getElementById('explainText').textContent = '未找到匹配「' + q + '」的节点，换个关键词试试。'; document.getElementById('relBox').classList.add('hidden'); return; }
+  S.locked = id; recordSearch(q, id); ub.classList.remove('hidden');
+  if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } else paintMemory(null,false);
+  renderLockCard(id);
+}
+function renderLockCard(id){
+  const box = document.getElementById('explainText');
+  const badge = document.getElementById('expBadge');
+  let cat = '通用衍生', imp = 1;
+  if(S.tab==='explore'){ const built = buildTree(S.center, [5,2,2], 3, 34); const n = built.nodes.find(x => x.id === id); if(n){ cat = n.cat; imp = n.imp; } }
+  else { const n = MEMORY.nodes.find(x => x.id === id); if(n){ cat = n.type; imp = n.imp != null ? n.imp : 0.6; } }
+  box.innerHTML = '<span class="catpill" style="background:'+legendColor(cat)+'">'+cat+'</span> '
+                + '<b style="font-size:14px;">'+id+'</b> 已锁定'
+                + '<div style="margin-top:8px;color:#4a5160;">重要程度：'+(Math.round(imp*100))+'%</div>'
+                + '<div class="hint" style="margin-top:6px;">已聚焦该节点并淡化其余元素；点击「解锁」恢复。</div>';
+  badge.innerHTML = '<span class="badge b-lock">🔒 已锁定</span>';
+}
+function unlock(){
+  S.locked = null;
+  document.getElementById('unlockBtn').classList.add('hidden');
+  document.getElementById('expBadge').innerHTML = '';
+  if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } else paintMemory(null,false);
+}
+document.getElementById('searchBtn').onclick = doSearch;
+document.getElementById('search').addEventListener('keydown', e => { if(e.key==='Enter') doSearch(); });
+document.getElementById('unlockBtn').onclick = unlock;
+
+/* ============================ 图例 ============================ */
+function renderLegend(){
+  const lb = document.getElementById('legendBox'); lb.innerHTML = '';
+  Object.keys(CATEGORIES).forEach(k => { const el = document.createElement('span'); el.className='lg'; el.innerHTML = '<i style="background:'+legendColor(k)+'"></i>'+k; lb.appendChild(el); });
+  const mb = document.getElementById('memLegendBox'); mb.innerHTML = '';
+  [['phase','对话阶段'],['inspiration','灵感'],['casual','普通提问 / 咨询']].forEach(([k,label]) => {
+    const el = document.createElement('span'); el.className='lg'; el.innerHTML = '<i style="background:'+TYPE_COLOR[k]+'"></i>'+label+'（越深越重要）'; mb.appendChild(el);
+  });
+}
+
+/* ============================ 事件 ============================ */
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+    t.classList.add('on');
+    S.tab = t.dataset.tab;
+    const isE = S.tab === 'explore';
+    ['barExplore','sideExplore','chartExplore'].forEach(id => document.getElementById(id).classList.toggle('hidden', !isE));
+    ['barMemory','sideMemory','chartMemory'].forEach(id => document.getElementById(id).classList.toggle('hidden', isE));
+    if(!isE){ S.scaleM = 1; S.offM = {x:0,y:0}; }
+    setTimeout(() => {
+      if(isE){ chartE.resize(); if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); }
+      else { chartM.resize(); paintMemory(null,false); }
+    }, 30);
+  };
+});
+document.querySelectorAll('#modeSeg button').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('#modeSeg button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    S.mode = b.dataset.mode;
+    S.scaleE = 1; S.offE = {x:0,y:0};           // 切换布局后默认看全图
+    if(S.mode==='timeline') renderTimeline(); else renderExplore();
+  };
+});
+document.querySelectorAll('#memModeSeg button').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('#memModeSeg button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    S.memMode = b.dataset.mode;
+    renderMemory();
+  };
+});
+document.getElementById('genBtn').onclick = () => {
+  const v = document.getElementById('kw').value.trim();
+  if(v){ S.scaleE = 1; S.offE = {x:0,y:0}; setCenter(v, 'init'); }
+};
+document.getElementById('artBtn').onclick = () => {
+  const a = document.getElementById('article').value.trim();
+  if(!a) return;
+  const seeds = ['机器学习','神经网络','颜色','强化学习','聚类'];
+  setCenter(seeds.find(s => a.indexOf(s) >= 0) || '机器学习', 'init');
+};
+document.getElementById('tone').onchange = e => { S.tone = e.target.value; };
+document.querySelectorAll('[data-len]').forEach(b => {
+  b.onclick = () => { S.len = +b.dataset.len; document.querySelectorAll('[data-len]').forEach(x => x.classList.remove('on')); b.classList.add('on'); };
+});
+document.getElementById('backBtn').onclick = () => { if(S.idx > 0){ S.idx--; S.center = S.trail[S.idx]; renderExplore(); } };
+document.getElementById('fwdBtn').onclick = () => { if(S.idx < S.trail.length - 1){ S.idx++; S.center = S.trail[S.idx]; renderExplore(); } };
+window.onresize = () => {
+  if(S.tab==='explore'){ chartE.resize(); if(S.mode==='timeline'){ if(TL) paintTimeline(null,false); } else { if(EXP) paintExplore(null,false); } }
+  else { chartM.resize(); if(MEMOBJ) paintMemory(null,false); }
+};
+
+/* 缩放按钮：更新自跟踪缩放值并触发重绘（paint 内 notMerge 会把 zoom 写回 series，
+   不传 center 由盒模型自动居中，避免上一轮「显式 center 与盒模型冲突导致图谱消失」） */
+function roamZoom(factor, which){
+  const z = clamp(curScale(which)*factor, 0.4, 6);
+  if(which==='E') S.scaleE=z; else S.scaleM=z;
+  updateZoomLvl();
+  scheduleRender(which);
+}
+function roamReset(which){
+  if(which==='E') S.scaleE=1; else S.scaleM=1;
+  updateZoomLvl();
+  scheduleRender(which);
+}
+document.getElementById('zoomIn').onclick = () => roamZoom(1.25, S.tab==='explore'?'E':'M');
+document.getElementById('zoomOut').onclick = () => roamZoom(1/1.25, S.tab==='explore'?'E':'M');
+document.getElementById('zoomReset').onclick = () => roamReset(S.tab==='explore'?'E':'M');
+document.getElementById('showAll').onchange = e => { S.showAll = e.target.checked; scheduleRender(S.tab==='explore'?'E':'M'); };
+
+/* 工具条收起 / 展开 */
+document.getElementById('fbCollapse').onclick = () => { document.getElementById('floatbar').classList.add('hidden'); document.getElementById('fbExpand').classList.remove('hidden'); };
+document.getElementById('fbExpand').onclick = () => { document.getElementById('floatbar').classList.remove('hidden'); document.getElementById('fbExpand').classList.add('hidden'); };
+
+/* ============================ 启动 ============================ */
+renderLegend();
+renderExplore();
+updateZoomLvl();
+</script>
+</body>
 </html>
