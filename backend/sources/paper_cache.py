@@ -63,6 +63,12 @@ class CacheEntry:
     source: str = ""
 
 
+# 缓存结构版本。改动"一个数据源的返回里带哪些字段"之后必须 +1，否则会读到旧格式的
+# 脏数据。v1 -> v2 就是因为 v1 的缓存条目里没有 doi/venue/citation_count：
+# 那些条目会让跨源去重退化到"标题+作者"，同一篇论文重复出现在报告里。
+SEARCH_CACHE_VERSION = "v2"
+
+
 def normalize_keyword(keyword: str) -> str:
     """关键词归一化：去首尾空格、压掉多余空白、统一小写。
 
@@ -82,6 +88,7 @@ def make_search_key(
 ) -> str:
     """搜索缓存键：来源 + 归一化关键词 + 排序 + 分页 + 条数 + 其余过滤参数。"""
     parts = [
+        f"v={SEARCH_CACHE_VERSION}",
         f"src={source.strip().lower()}",
         f"q={normalize_keyword(keyword)}",
         f"sort={(sort_by or 'default').strip().lower()}",

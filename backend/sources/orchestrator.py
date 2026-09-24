@@ -178,7 +178,8 @@ class SearchOrchestrator:
 
         by_name = {r.name: r for r in outcome.results}
         if pending:
-            self._run_all(pending, keyword, limit, cfg, by_name, cache_keys)
+            self._run_all(pending, keyword, limit, cfg, by_name, cache_keys,
+                         budget=cfg.paper_search_budget_seconds)
 
         # 全部失败：拿过期缓存兜底
         if not any(r.ok for r in outcome.results):
@@ -208,9 +209,16 @@ class SearchOrchestrator:
         return outcome
 
     def _run_all(self, names: list[str], keyword: str, limit: int, cfg: Settings,
-                 by_name: dict[str, SourceResult], cache_keys: dict[str, str]) -> None:
-        """并发问所有源：各源互不干扰，各自的超时也独立。"""
-        threads: list[threading.Thread] = []
+                 by_name: dict[str, SourceResult], cache_keys: dict[str, str],
+                 budget: float | None = None) -> None:
+        """并发问所有源：各源互不干扰，各自的超时也独立。
+
+        budget 是"这次并行检索总共愿意等多久"。没有它的话，最慢的源决定整体耗时，
+        而 MCP 走子进程握手，超时是 45s+——一个挂住的 MCP 会让每次搜索都干等 50 秒，
+        哪怕其他三个源早就把结果拿回来了。超预算的源直接放弃等待（线程是 daemon，
+        结果到了也丢弃），已经拿到的源照常返回。
+        """
+        threads: list[tuple[str, threading.Thread]] = []
 
         def worker(name: str) -> None:
             result = by_name[name]
@@ -233,10 +241,38 @@ class SearchOrchestrator:
         for name in names:
             thread = threading.Thread(target=worker, args=(name,), daemon=True,
                                       name=f"provider-{name}")
-            threads.append(thread)
+            threads.append((name, thread))
             thread.start()
-        for thread in threads:
-            thread.join()
+
+        deadline = None if not budget or budget <= 0 else time.monotonic() + budget
+        grace = max(0.0, cfg.paper_search_grace_seconds)
+        first_success_at: float | None = None
+
+        # 等第一个源成功的那一刻开始计时；成功之后再给 grace 秒宽限，然后收工。
+        # 没有这段宽限逻辑的话，一个卡住的源（实测 arXiv 从本机 SSL 握手能挂 20s）
+        # 会把每一次检索都拖到单源超时为止，哪怕另外三个源 3 秒就回来了。
+        while True:
+            if all(not thread.is_alive() for _, thread in threads):
+                break
+            now = time.monotonic()
+            if first_success_at is None and any(by_name[name].ok for name, _ in threads):
+                first_success_at = now
+                log.info("已有数据源返回结果，剩余源最多再等 %.1fs keyword=%r", grace, keyword)
+            if first_success_at is not None and grace and now - first_success_at >= grace:
+                log.info("宽限期结束，放弃等待未返回的数据源 keyword=%r", keyword)
+                break
+            if deadline is not None and now >= deadline:
+                log.warning("并行检索达到总预算 %.0fs，放弃等待未返回的数据源 keyword=%r",
+                            budget, keyword)
+                break
+            time.sleep(0.05)
+
+        for name, thread in threads:
+            if thread.is_alive():
+                result = by_name[name]
+                if not result.ok:
+                    result.error = result.error or "响应太慢，已放弃等待（其他来源已返回结果）"
+                    log.warning("数据源 %s 未在宽限期内返回，已放弃等待 keyword=%r", name, keyword)
 
     def timeout_for(self, name: str, cfg: Settings) -> int:
         """MCP 走子进程，握手加检索本身就慢，给它单独的长超时。"""

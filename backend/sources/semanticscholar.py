@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 import urllib.parse
 
-from .base import http_get
+from .throttle import guarded_get_text
 from .models import Paper, normalize_arxiv_id, to_paper_dicts
 
 ENDPOINT = "https://api.semanticscholar.org/graph/v1/paper/search"
 FIELDS = "title,abstract,year,authors,url,venue,externalIds,citationCount,publicationDate"
 SOURCE_LABEL = "Semantic Scholar"
+SOURCE_KEY = "semanticscholar"      # 限速/熔断用的键，与 PAPER_SOURCE_ORDER 里的名字一致
 
 
 def search(keyword: str, limit: int, timeout: int = 15) -> list[dict]:
@@ -25,7 +26,7 @@ def search_papers(keyword: str, limit: int, timeout: int = 15) -> list[Paper]:
     params = urllib.parse.urlencode(
         {"query": keyword, "limit": max(1, min(limit, 50)), "fields": FIELDS}
     )
-    text = http_get(f"{ENDPOINT}?{params}", timeout=timeout)
+    text = guarded_get_text(f"{ENDPOINT}?{params}", source=SOURCE_KEY, timeout=timeout)
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:

@@ -60,6 +60,29 @@ def _norm_author(value: str | None) -> str:
     return _WS.sub(" ", text).strip()
 
 
+def _surname(value: str | None) -> str:
+    """只取姓氏，用来做"标题 + 第一作者"的去重键。
+
+    为什么要退到姓氏：同一篇论文在不同来源里的作者写法经常对不上——
+    OpenAlex 给全名 `Zonghan Wu`，Crossref 给 `Wu, Z`。整串比较（或按词比较）
+    这两种写法永远不相等，结果就是同一篇论文在报告里出现两次（实测真实发生过：
+    《A Comprehensive Survey on Graph Neural Networks》的正式版和预印版各占一条）。
+    只比姓氏就都能归一成 `wu`，标题一长就足够定位到唯一一篇论文了。
+    """
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if "," in text:                      # "Wu, Z" / "Wu, Zonghan"
+        family = text.split(",", 1)[0]
+    else:                                # "Zonghan Wu"
+        parts = text.split()
+        # "Zonghan Wu Jr" / "John Smith III"：后缀不是姓氏，往前挪一位
+        if len(parts) > 1 and parts[-1].casefold().rstrip(".") in {"jr", "sr", "ii", "iii", "iv"}:
+            parts = parts[:-1]
+        family = parts[-1] if parts else ""
+    return re.sub(r"[^a-z0-9]", "", family.casefold())
+
+
 def _to_year(value: Any) -> int | None:
     if isinstance(value, int):
         return value if 1500 <= value <= 2100 else None
@@ -129,8 +152,28 @@ class Paper:
         title = normalize_title(self.title)
         if not title:
             return ""
-        first_author = _norm_author(self.authors[0]) if self.authors else ""
+        first_author = _surname(self.authors[0]) if self.authors else ""
         return f"title:{title}|{first_author}" if first_author else f"title:{title}"
+
+    @property
+    def identity_keys(self) -> list[str]:
+        """这篇论文**所有**能确认身份的特征，而不只是最优先的那一个。
+
+        为什么要多个：不同来源给的字段不一样——MCP 有时只给标题，Crossref 只给 DOI。
+        如果只看"最高优先级的那一个 key"，那"有 DOI 的那条"和"只有标题的那条"
+        永远碰不到一起，同一篇论文就会在报告里出现两次（实测真实发生过）。
+        按"任一特征命中就合并"来做，DOI 和标题就能互相认领。
+        """
+        keys: list[str] = []
+        if self.doi:
+            keys.append(f"doi:{self.doi}")
+        if self.arxiv_id:
+            keys.append(f"arxiv:{self.arxiv_id}")
+        title = normalize_title(self.title)
+        if title:
+            first_author = _surname(self.authors[0]) if self.authors else ""
+            keys.append(f"title:{title}|{first_author}" if first_author else f"title:{title}")
+        return keys
 
     def merge(self, other: "Paper") -> "Paper":
         """两个来源都认这篇论文：把两边的信息拼起来，谁有值用谁的。"""
@@ -202,23 +245,32 @@ def to_paper_dicts(papers: Iterable[Paper], limit: int | None = None) -> list[di
 
 
 def dedupe_papers(papers: Iterable[Paper]) -> list[Paper]:
-    """多源结果去重合并：同key 合并，无 key 的（连标题都没有）原样保留、不合并。"""
-    merged: dict[str, Paper] = {}
-    order: list[str] = []
+    """多源结果去重合并：**任意一个身份特征命中**就合并，顺序按首次出现。
+
+    用"任一 key 命中"而不是"只按最高优先级 key"：后者会让
+    `doi:10.1109/tnn.2008.2005605` 和 `title:the graph neural network model|franco scarselli`
+    变成两条，重复论文直接进报告。合并之后要用新合并出来的特征**重新登记**，
+    因为补齐 DOI 的那一条可能正好补上了另一条缺失的身份。
+    """
+    merged: list[Paper] = []
+    index: dict[str, int] = {}
     orphans: list[Paper] = []
 
     for paper in papers:
-        key = paper.dedupe_key
-        if not key:
-            orphans.append(paper)
+        keys = paper.identity_keys
+        if not keys:
+            orphans.append(paper)          # 连标题都没有，无法判定身份，原样保留
             continue
-        if key in merged:
-            merged[key].merge(paper)
+        target = next((index[k] for k in keys if k in index), None)
+        if target is None:
+            merged.append(paper)
+            target = len(merged) - 1
         else:
-            merged[key] = paper
-            order.append(key)
+            merged[target].merge(paper)
+        for key in merged[target].identity_keys:   # 合并后可能多出新的身份，重新登记
+            index[key] = target
 
-    return [merged[k] for k in order] + orphans
+    return merged + orphans
 
 
 def merge_source_results(results: dict[str, list[Paper]], order: list[str]) -> list[Paper]:

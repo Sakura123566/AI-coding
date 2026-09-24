@@ -1,184 +1,160 @@
-"""检索源编排：按配置选择来源，auto 模式下按顺序自动降级。"""
+"""检索源编排：按配置选择来源，并行取数 + 跨源合并去重。
+
+模块职责（改造后）：
+- `search_papers()` 是唯一对外入口：决定"这次问哪些源、用什么模式"，
+  把调度交给 `SearchOrchestrator`，最后把 `Paper` 转回老契约的 dict 列表；
+- 真正的调度在 `orchestrator.SearchOrchestrator`：并行/降级、按源缓存、
+  请求合并、跨源合并去重、全挂时用过期缓存兜底；
+- `mcp_search()` 留在本模块（要按 MCP_TRANSPORT 分派四种传输），
+  由 `providers.McpProvider` 反向调用。
+
+为什么删掉了老的串行 REGISTRY 循环：那套"顺序尝试 + 进程内冷却"已经被
+orchestrator 完整覆盖，留着就是两份要同步维护的降级策略。而且实测发现
+auto 路径根本没走 orchestrator——返回的论文 doi 全为空、
+`A Comprehensive Survey on GNN` 重复出现两次，跨源去重压根没生效。
+"""
 from __future__ import annotations
 
 import sys
 import threading
-import time
-from typing import Any, Callable
+from typing import Any
 
 from ..config import Settings
 from ..logging_setup import get_logger
+# 这几个子模块保留导入：外部一直用 `from backend.sources import arxiv` 的写法取它们
 from . import arxiv, crossref, mock, mcp_http, mcp_stdio, mcp_ws, openalex, semanticscholar
 from .models import Paper, to_paper_dicts
-from .orchestrator import SearchOrchestrator, abort_mcp, run_with_timeout
+from .orchestrator import SearchOrchestrator, SearchOutcome, abort_mcp, run_with_timeout
 from .paper_cache import get_paper_cache
 from .providers import PROVIDERS
 
 log = get_logger("sources")
 
-# In-process source cooldown: after upstream rate limiting, do not hammer it again.
-_COOLDOWN_UNTIL: dict[str, float] = {}
-_COOLDOWN_LOCK = threading.Lock()
-
-# 名称 → (执行函数, 展示名)
-REGISTRY: dict[str, tuple[Callable[..., list[dict]], str]] = {
-    "arxiv": (arxiv.search, "arXiv"),
-    "openalex": (openalex.search, "OpenAlex"),
-    "semanticscholar": (semanticscholar.search, "Semantic Scholar"),
-    "crossref": (crossref.search, "Crossref"),
-    "mock": (mock.search, "mock"),
-}
+__all__ = ["search_papers", "mcp_search", "get_orchestrator", "reset_orchestrator"]
 
 
-def _cooldown_remaining(name: str) -> int:
-    now = time.monotonic()
-    with _COOLDOWN_LOCK:
-        until = _COOLDOWN_UNTIL.get(name, 0.0)
-        if until <= now:
-            _COOLDOWN_UNTIL.pop(name, None)
-            return 0
-        return max(1, int(round(until - now)))
+# ---------------- 调度器单例 ----------------
+_ORCHESTRATOR: SearchOrchestrator | None = None
+_ORCHESTRATOR_LOCK = threading.Lock()
 
 
-def _mark_cooldown(name: str, error: Exception, cfg: Settings) -> None:
-    """Mark 429/406 sources so the same process does not retry immediately."""
-    if cfg.source_cooldown_seconds <= 0:
-        return
-    text = str(error).lower()
-    if not any(token in text for token in ("429", "406", "too many requests", "rate limit")):
-        return
-    with _COOLDOWN_LOCK:
-        _COOLDOWN_UNTIL[name] = time.monotonic() + cfg.source_cooldown_seconds
+def get_orchestrator() -> SearchOrchestrator:
+    """全进程共用一个调度器：它的按源缓存合并状态是进程内状态，不能每次新建。"""
+    global _ORCHESTRATOR
+    with _ORCHESTRATOR_LOCK:
+        if _ORCHESTRATOR is None:
+            from ..config import settings as _settings
 
-
-def _call_registry_source(name: str, fn: Callable[..., list[dict]], keyword: str,
-                          limit: int, cfg: Settings) -> list[dict]:
-    """Pass the configured polite-pool email to OpenAlex/Crossref direct calls."""
-    if name in ("openalex", "crossref"):
-        return fn(keyword, limit, cfg.http_timeout, cfg.scholarly_contact_email)
-    return fn(keyword, limit, cfg.http_timeout)
-
-
-def _run_with_timeout(fn: Callable[[], list[dict]], timeout: int,
-                      cancel: Callable[[], None] | None = None) -> list[dict]:
-    """给可能卡住的调用（尤其是 MCP 子进程）套一层硬超时。
-
-    为什么不用 ThreadPoolExecutor：它的 `with` 退出会 `shutdown(wait=True)`，
-    超时后主线程仍被阻塞等线程结束，"超时"就只是自己先抛错、接口照样挂着。
-    这里改用 daemon 线程 + 超时后主动掐断上游（cancel），让线程真能退出。
-    """
-    box: dict[str, Any] = {}
-
-    def runner() -> None:
-        try:
-            box["value"] = fn()
-        except BaseException as exc:  # noqa: BLE001 - 原样带回主线程重抛
-            box["error"] = exc
-
-    worker = threading.Thread(target=runner, daemon=True, name="source-call")
-    worker.start()
-    worker.join(timeout)
-
-    if worker.is_alive():
-        if cancel is not None:
-            try:
-                cancel()
-            except Exception:  # noqa: BLE001 - 清理失败不能盖掉超时本身
-                log.warning("超时后清理上游连接失败")
-        worker.join(5)  # 给被掐断的线程一点收尾时间，之后就不管它了
-        raise TimeoutError(f"检索超时（>{timeout}s）")
-
-    if "error" in box:
-        raise box["error"]
-    return box.get("value") or []
-
-
-def _abort_mcp() -> None:
-    """超时后掐断所有还在进行的 MCP 连接。
-
-    MCP 三种传输里都有会永久阻塞的读操作（子进程的 readline、SSE 事件流、WebSocket recv），
-    不掐断的话工作线程永远不会自己退出，接口就会一直转圈。
-    """
-    for mod in (mcp_stdio, mcp_http, mcp_ws):
-        abort = getattr(mod, "abort_active", None)
-        if abort is None:
-            continue
-        try:
-            abort()
-        except Exception:  # noqa: BLE001
-            log.warning("中止 %s 连接时出错", mod.__name__)
-
-
-def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[str, Any]], list[str]]:
-    """返回 (论文列表, 降级告警)。任何来源失败都会被记录，不抛给上层。"""
-    warnings: list[str] = []
-
-    # ---- 指定单一来源 ----
-    if cfg.paper_source == "mock":
-        return mock.search(keyword, limit, cfg.http_timeout), warnings
-
-    if cfg.paper_source == "mcp":
-        try:
-            papers = _run_with_timeout(
-                lambda: mcp_search(keyword, limit, cfg), cfg.mcp_timeout + 5, cancel=_abort_mcp
+            _ORCHESTRATOR = SearchOrchestrator(
+                cache=get_paper_cache(),
+                provider_timeout=_settings.paper_provider_timeout_seconds,
             )
-            return papers, warnings
-        except Exception as e:  # noqa: BLE001 - 上游异常一律转成可读告警
-            raise _as_upstream_error(e, "MCP") from e
+        return _ORCHESTRATOR
 
-    if cfg.paper_source in REGISTRY:
-        fn, label = REGISTRY[cfg.paper_source]
-        try:
-            return _run_with_timeout(
-                lambda: _call_registry_source(cfg.paper_source, fn, keyword, limit, cfg),
-                cfg.http_timeout + 5,
-            ), warnings
-        except Exception as e:  # noqa: BLE001
-            raise _as_upstream_error(e, label) from e
 
-    # ---- auto：按顺序尝试，第一个成功的非空结果即返回 ----
-    # 顺序里可以写 mcp，实现"MCP 优先、arXiv 兜底"（MCP 依赖本机管理器，随时可能不在）
-    chain = [s for s in cfg.paper_source_order if s in REGISTRY or s == "mcp"] or ["arxiv", "crossref"]
-    last_error: Exception | None = None
-    for name in chain:
-        label = "MCP" if name == "mcp" else REGISTRY[name][1]
-        remaining = _cooldown_remaining(name)
-        if remaining:
-            warnings.append(f"来源 {label} 冷却中（剩余 {remaining}s）")
-            log.warning("来源 %s 冷却中，尝试下一个 keyword=%r 剩余=%ss", label, keyword, remaining)
+def reset_orchestrator() -> None:
+    """测试用：丢掉当前调度器（连带它的缓存与请求合并状态）。"""
+    global _ORCHESTRATOR
+    with _ORCHESTRATOR_LOCK:
+        _ORCHESTRATOR = None
+
+
+# ---------------- 路由：这次问哪些源、用什么模式 ----------------
+def _mode(cfg: Settings) -> str:
+    return "fallback" if (cfg.paper_search_mode or "").lower() == "fallback" else "parallel"
+
+
+def _resolve_route(cfg: Settings) -> tuple[list[str], str]:
+    """决定这次问哪些源、用什么模式。
+
+    PAPER_SOURCE 指定了具体来源 → 只问那一个。
+    PAPER_SOURCE=auto → 按 PAPER_SOURCE_ORDER 全部问一遍：默认并行，各源字段互补
+    （Crossref 给 DOI、OpenAlex 给摘要和引用数）；配成 fallback 则退回老行为
+    "按顺序问、第一个非空结果即返回"。
+    """
+    source = (cfg.paper_source or "auto").lower()
+    known = [s for s in (cfg.paper_source_order or []) if s in PROVIDERS]
+
+    if source == "auto":
+        return (known or ["arxiv", "crossref"]), _mode(cfg)
+    if source in PROVIDERS:
+        return [source], "parallel"
+    log.warning("PAPER_SOURCE=%r 不是已知数据源，回退 auto：可用=%s", source, sorted(PROVIDERS))
+    return (known or ["arxiv"]), _mode(cfg)
+
+
+# ---------------- 对外入口 ----------------
+def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[str, Any]], list[str]]:
+    """按配置选源检索，返回 (论文列表, 降级告警)。
+
+    签名和返回类型与改造前完全一致，`pipeline` / `chat_engine` 一行都不用改。
+    新增的两件事：
+    - 多源结果会**合并去重**（同一个 DOI/arXiv ID/标题+作者只留一条，字段互补）；
+    - 缺摘要的论文用 DOI 去 OpenAlex **批量回填**摘要。
+    """
+    names, mode = _resolve_route(cfg)
+    outcome = get_orchestrator().search(keyword, limit, cfg, names=names, mode=mode)
+    warnings = list(outcome.warnings)
+
+    if not outcome.papers:
+        # 全部失败且没有可用缓存：给出可读错误，不假装成功
+        raise _explain_failure(outcome)
+
+    if cfg.abstract_backfill_enabled:
+        warnings.extend(_backfill_abstracts(outcome.papers, cfg))
+
+    log.info(
+        "检索完成 keyword=%r 源=%s 模式=%s 篇数=%s 降级=%s 缓存=%s",
+        keyword, ",".join(names), mode, len(outcome.papers),
+        outcome.degraded, outcome.from_cache,
+    )
+    return to_paper_dicts(outcome.papers, limit), warnings
+
+
+def _explain_failure(outcome: SearchOutcome) -> Exception:
+    """把"每个源为什么失败"拼成一句人话，别只回一句"检索失败"。"""
+    parts = [f"{r.label}：{r.error}" for r in outcome.failed if r.error]
+    detail = "；".join(parts) or "所有来源均无结果"
+    return _as_upstream_error(RuntimeError(detail), "论文检索")
+
+
+def _backfill_abstracts(papers: list[Paper], cfg: Settings) -> list[str]:
+    """给缺摘要的论文补摘要：一次 OpenAlex 批量 DOI 请求能补一整批。
+
+    为什么必须做：实测降级到 Crossref 时摘要几乎全空，模型只能回一句
+    "摘要为空，无法展开"。OpenAlex 有摘要（倒排索引形式），用 DOI 批量换回来，
+    报告才有内容可写。回填失败不影响主流程——拿不到摘要也照常返回论文，
+    只是明确告诉上层"这几篇确实没有摘要"，而不是让模型自己承认没法展开。
+    """
+    candidates = [p for p in papers if not (p.abstract or "").strip() and p.doi]
+    candidates = candidates[: max(0, int(cfg.abstract_backfill_max))]
+    if not candidates:
+        return []
+
+    try:
+        found = openalex.fetch_by_dois(
+            [p.doi for p in candidates],
+            timeout=cfg.http_timeout,
+            contact_email=cfg.scholarly_contact_email,
+        )
+    except Exception as e:  # noqa: BLE001 - 补摘要是锦上添花，不能拖垮整次检索
+        log.warning("摘要回填失败（不影响主流程）：%s", e)
+        return [f"补充论文摘要失败：{e}"]
+
+    filled = 0
+    for paper in candidates:
+        record = found.get(paper.doi)
+        if record is None:
             continue
+        before = len(paper.abstract or "")
+        paper.merge(record)          # merge 取更长的一份摘要，顺带补引用数与期刊
+        if len(paper.abstract or "") > before:
+            filled += 1
 
-        if name == "mcp":
-            try:
-                papers = _run_with_timeout(lambda: mcp_search(keyword, limit, cfg),
-                                           cfg.mcp_timeout + 5, cancel=_abort_mcp)
-            except Exception as e:  # noqa: BLE001
-                last_error = e
-                _mark_cooldown(name, e, cfg)
-                warnings.append(f"来源 {label} 不可用：{e}")
-                log.warning("来源 %s 不可用，尝试下一个 keyword=%r 原因=%s", label, keyword, e)
-                continue
-        else:
-            fn, _ = REGISTRY[name]
-            try:
-                papers = _run_with_timeout(
-                    lambda: _call_registry_source(name, fn, keyword, limit, cfg),
-                    cfg.http_timeout + 5,
-                )
-            except Exception as e:  # noqa: BLE001
-                last_error = e
-                _mark_cooldown(name, e, cfg)
-                warnings.append(f"来源 {label} 不可用：{e}")
-                log.warning("来源 %s 不可用，尝试下一个 keyword=%r 原因=%s", label, keyword, e)
-                continue
-        if papers:
-            log.info("来源 %s 返回 %s 篇 keyword=%r", label, len(papers), keyword)
-            return papers, warnings
-        warnings.append(f"来源 {label} 没有返回结果")
-        log.info("来源 %s 返回空 keyword=%r", label, keyword)
-
-    # 全部失败：给出可读错误，不假装成功
-    raise _as_upstream_error(last_error or RuntimeError("所有来源均无结果"), "论文检索")
+    log.info("摘要回填 候选=%s OpenAlex命中=%s 补上=%s", len(candidates), len(found), filled)
+    if filled < len(candidates):
+        return [f"有 {len(candidates) - filled} 篇论文各源都没有收录摘要，报告对它们的描述会受限。"]
+    return []
 
 
 def mcp_search(keyword: str, limit: int, cfg: Settings) -> list[dict[str, Any]]:

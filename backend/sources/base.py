@@ -76,6 +76,12 @@ def http_get(url: str, timeout: int = 15, headers: dict[str, str] | None = None)
     return http_get_response(url, timeout=timeout, headers=headers).body
 
 
+# 统一模型在契约字段之外追加的字段。MCP 返回里本来就带着它们，
+# 从前 `make_paper` 只挑那 7 个老字段，等于把 DOI/arXiv ID 一起丢了——
+# 后果是跨源去重退化到"标题+作者"，同一篇论文从两个源各来一条。
+EXTRA_FIELDS = ("doi", "arxiv_id", "venue", "citation_count", "published_date", "sources")
+
+
 def make_paper(
     index: int,
     title: str | None,
@@ -84,10 +90,15 @@ def make_paper(
     abstract: str | None = None,
     url: str | None = None,
     source: str | None = None,
+    **extra: Any,
 ) -> dict[str, Any]:
-    """把任意来源的字段洗成契约字段，缺什么就留空，绝不编造。"""
+    """把任意来源的字段洗成契约字段，缺什么就留空，绝不编造。
+
+    老契约的 7 个字段在前，统一模型的新字段（`EXTRA_FIELDS`）有值才追加——
+    老调用方只读它认识的那几个，不受影响。
+    """
     title = (title or "").strip().replace("\n", " ")
-    return {
+    paper: dict[str, Any] = {
         "id": f"P{index}",
         "title": title or "(无标题)",
         "authors": [a.strip() for a in (authors or []) if a and a.strip()][:12],
@@ -96,6 +107,11 @@ def make_paper(
         "url": url or None,
         "source": source or None,
     }
+    for key in EXTRA_FIELDS:
+        value = extra.get(key)
+        if value not in (None, "", [], {}):
+            paper[key] = value
+    return paper
 
 
 def _to_year(value: Any) -> int | None:
@@ -124,16 +140,25 @@ FIELD_ALIASES = {
     "year": ("year", "publication_year", "pub_year", "published", "date", "issued", "年份"),
     "abstract": ("abstract", "summary", "description", "snippet", "摘要"),
     "url": ("url", "link", "doi", "external_url", "paper_url", "链接"),
+    # 统一模型字段：第三方 MCP 服务的命名各不一样，能对上就带上
+    "doi": ("doi", "DOI", "paper_doi"),
+    "arxiv_id": ("arxiv_id", "arxivId", "arxiv", "arxivID"),
+    "venue": ("venue", "journal", "container_title", "publication"),
+    "citation_count": ("citation_count", "citationCount", "cited_by_count", "citations"),
+    "published_date": ("published_date", "publishedDate", "publication_date", "date"),
+    "sources": ("sources",),
 }
 
 
 def pick(d: dict[str, Any], key: str) -> Any:
-    for name in FIELD_ALIASES[key]:
+    # 没登记的字段就按原字段名找，返回 None 而不是 KeyError——
+    # 这类函数是在洗"不知道什么结构"的外部数据，不该因为少一个别名就整个炸掉
+    for name in FIELD_ALIASES.get(key, (key,)):
         if name in d and d[name]:
             return d[name]
     # 忽略大小写再试一次
     lower = {str(k).lower(): v for k, v in d.items()}
-    for name in FIELD_ALIASES[key]:
+    for name in FIELD_ALIASES.get(key, (key,)):
         if name.lower() in lower and lower[name.lower()]:
             return lower[name.lower()]
     return None
@@ -174,6 +199,14 @@ def normalize_raw_items(items: list[Any], source: str, limit: int) -> list[dict[
                 pick(raw, "abstract"),
                 _first_url(pick(raw, "url")),
                 raw.get("source") or raw.get("venue") or source,
+                # 把统一模型的字段原样带下去，否则跨源去重会退化到"标题+作者"
+                doi=pick(raw, "doi") or pick(raw, "DOI"),
+                arxiv_id=pick(raw, "arxiv_id") or pick(raw, "arxivId") or pick(raw, "arxiv"),
+                venue=pick(raw, "venue"),
+                citation_count=pick(raw, "citation_count") or pick(raw, "citationCount")
+                or pick(raw, "cited_by_count"),
+                published_date=pick(raw, "published_date") or pick(raw, "publishedDate"),
+                sources=pick(raw, "sources"),
             )
         )
         if len(papers) >= limit:

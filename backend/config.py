@@ -82,6 +82,31 @@ class Settings:
     default_limit: int = 10
     max_limit: int = 30
 
+    # ---- 多源检索调度 ----
+    # parallel：并行问所有源，合并去重（摘要互补，默认）
+    # fallback：按顺序串行问，第一个非空结果即返回（改造前的老行为）
+    paper_search_mode: str = "parallel"
+    paper_search_budget_seconds: float = 30.0   # parallel 总预算，超时未返回的源直接放弃
+    # 已经有源返回结果后，最多再等这么久等剩下的源（它们可能补上摘要/DOI）。
+    # 没有它的话，一个卡住的源会把每次检索都拖到"总预算"或"单源超时"为止。
+    paper_search_grace_seconds: float = 4.0
+    # 并行模式下单个源最多等多久。arXiv 从被墙的网络里 SSL 握手会一直挂着，
+    # 不设上限的话它每次都能吃掉 20s+，把整次检索拖垮。MCP 走子进程另算（mcp_timeout）。
+    paper_provider_timeout_seconds: int = 12
+    # 缺摘要的论文用 DOI 去 OpenAlex 批量补摘要（一次请求最多 50 个 DOI）
+    abstract_backfill_enabled: bool = True
+    abstract_backfill_max: int = 20
+
+    # ---- 通用上游保护（arXiv 以外的 OpenAlex / Crossref / Semantic Scholar）----
+    # arXiv 有 arxiv_client 专属保护，这几个源之前是裸请求，429 就直接失败
+    http_max_retries: int = 2                   # 单次请求最多重试几次（不含首次）
+    http_backoff_base_seconds: float = 1.5      # 退避基数：等待 = 基数 × 2^次数
+    http_max_backoff_seconds: float = 20.0      # 单次退避上限
+    http_jitter_ratio: float = 0.3              # 抖动比例，避免多进程同时重试
+    source_circuit_threshold: int = 3           # 连续失败几次后熔断
+    source_circuit_cooldown_seconds: float = 120.0
+    source_rate_limit_backend: str = "memory"   # memory | sqlite
+
     # ---- arXiv 统一出口：限速 / 重试 / 冷却 / 熔断 ----
     # 相邻两次 arXiv 请求的最小间隔（秒）。arXiv 官方建议 3 秒，别调小。
     arxiv_min_interval_seconds: float = 3.0
@@ -181,6 +206,19 @@ class Settings:
             http_timeout=_get_int("HTTP_TIMEOUT", 15),
             scholarly_contact_email=_get("SCHOLARLY_CONTACT_EMAIL"),
             source_cooldown_seconds=_get_int("SOURCE_COOLDOWN_SECONDS", 300),
+            paper_search_mode=_get("PAPER_SEARCH_MODE", "parallel").lower(),
+            paper_search_budget_seconds=_get_float("PAPER_SEARCH_BUDGET_SECONDS", 30.0),
+            paper_search_grace_seconds=_get_float("PAPER_SEARCH_GRACE_SECONDS", 4.0),
+            paper_provider_timeout_seconds=_get_int("PAPER_PROVIDER_TIMEOUT_SECONDS", 12),
+            abstract_backfill_enabled=_get_bool("ABSTRACT_BACKFILL_ENABLED", True),
+            abstract_backfill_max=_get_int("ABSTRACT_BACKFILL_MAX", 20),
+            http_max_retries=_get_int("HTTP_MAX_RETRIES", 2),
+            http_backoff_base_seconds=_get_float("HTTP_BACKOFF_BASE_SECONDS", 1.5),
+            http_max_backoff_seconds=_get_float("HTTP_MAX_BACKOFF_SECONDS", 20.0),
+            http_jitter_ratio=_get_float("HTTP_JITTER_RATIO", 0.3),
+            source_circuit_threshold=_get_int("SOURCE_CIRCUIT_THRESHOLD", 3),
+            source_circuit_cooldown_seconds=_get_float("SOURCE_CIRCUIT_COOLDOWN_SECONDS", 120.0),
+            source_rate_limit_backend=_get("SOURCE_RATE_LIMIT_BACKEND", "memory").lower(),
             default_limit=_get_int("DEFAULT_LIMIT", 10),
             max_limit=_get_int("MAX_LIMIT", 30),
             arxiv_min_interval_seconds=_get_float("ARXIV_MIN_INTERVAL_SECONDS", 3.0),
