@@ -11,27 +11,69 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from typing import Any, Iterable
+
+from .errors import UpstreamError, parse_retry_after
 
 UA = "ResearchNavigator/0.1 (student-demo; contact: local)"
 
 
-def http_get(url: str, timeout: int = 15, headers: dict[str, str] | None = None) -> str:
-    """GET 文本，出错统一抛 RuntimeError，便于上层降级。"""
+@dataclass
+class HttpResponse:
+    """带状态码和响应头的取数结果：429 要读 Retry-After，光有文本不够。"""
+
+    body: str
+    status: int
+    headers: dict[str, str]
+    url: str
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status < 300
+
+
+def http_get_response(url: str, timeout: int = 15,
+                      headers: dict[str, str] | None = None) -> HttpResponse:
+    """GET 请求，正常返回带状态码的结果，异常抛 UpstreamError（含 status / retry_after）。"""
     req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
+    host = urllib.parse.urlsplit(url).netloc
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
             if resp.headers.get("Content-Encoding") == "gzip":
                 raw = gzip.decompress(raw)
             charset = resp.headers.get_content_charset() or "utf-8"
-            return raw.decode(charset, "replace")
-    except urllib.error.HTTPError as e:  # 429 / 5xx 都算上游问题
-        raise RuntimeError(f"HTTP {e.code} from {urllib.parse.urlsplit(url).netloc}") from e
+            return HttpResponse(
+                body=raw.decode(charset, "replace"),
+                status=getattr(resp, "status", 200),
+                headers={k.lower(): v for k, v in resp.headers.items()},
+                url=url,
+            )
+    except urllib.error.HTTPError as e:
+        # 错误响应体里常有原因说明，读出来塞进消息，便于排障
+        try:
+            detail = e.read().decode("utf-8", "replace")[:200]
+        except Exception:  # noqa: BLE001 - 读不到体就算了，状态码才是关键
+            detail = ""
+        message = f"HTTP {e.code} from {host}"
+        if detail:
+            message = f"{message}：{detail.strip()[:120]}"
+        raise UpstreamError(
+            message,
+            status=e.code,
+            retry_after=parse_retry_after(e.headers.get("Retry-After") if e.headers else None),
+            source=host,
+        ) from e
     except urllib.error.URLError as e:
-        raise RuntimeError(f"网络不可达：{urllib.parse.urlsplit(url).netloc}（{e.reason}）") from e
+        raise UpstreamError(f"网络不可达：{host}（{e.reason}）", kind="network", source=host) from e
     except TimeoutError as e:
-        raise RuntimeError(f"请求超时：{urllib.parse.urlsplit(url).netloc}") from e
+        raise UpstreamError(f"请求超时：{host}", kind="timeout", source=host) from e
+
+
+def http_get(url: str, timeout: int = 15, headers: dict[str, str] | None = None) -> str:
+    """GET 文本，出错统一抛 UpstreamError（仍继承 RuntimeError，旧调用方无需改动）。"""
+    return http_get_response(url, timeout=timeout, headers=headers).body
 
 
 def make_paper(

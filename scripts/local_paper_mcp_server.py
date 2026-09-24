@@ -21,15 +21,26 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from backend.config import settings  # noqa: E402
 from backend.sources import arxiv, crossref, openalex, semanticscholar  # noqa: E402
 
 PROTOCOL = "2024-11-05"
+
+
+def _search_openalex(keyword: str, limit: int, timeout: int = 15) -> list[dict]:
+    return openalex.search(keyword, limit, timeout, settings.scholarly_contact_email)
+
+
+def _search_crossref(keyword: str, limit: int, timeout: int = 15) -> list[dict]:
+    return crossref.search(keyword, limit, timeout, settings.scholarly_contact_email)
+
+
 SOURCES = {
     "search_arxiv": (arxiv.search, "Search papers on arXiv. Args: query(keyword), limit"),
     # arXiv 会对请求频繁的 IP 返回 406 封禁，这时改用 OpenAlex 兜底（免费、无密钥、限流宽松）
-    "search_openalex": (openalex.search, "Search papers via OpenAlex. Args: query, limit"),
+    "search_openalex": (_search_openalex, "Search papers via OpenAlex. Args: query, limit"),
     "search_semanticscholar": (semanticscholar.search, "Search papers via Semantic Scholar. Args: query, limit"),
-    "search_crossref": (crossref.search, "Search published papers via Crossref. Args: query, limit"),
+    "search_crossref": (_search_crossref, "Search published papers via Crossref. Args: query, limit"),
 }
 
 

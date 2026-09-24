@@ -75,10 +75,35 @@ class Settings:
 
     # 论文来源
     paper_source: str = "auto"                       # auto | arxiv | openalex | semanticscholar | crossref | mock | mcp
-    paper_source_order: list[str] = field(default_factory=lambda: ["arxiv", "openalex", "crossref"])
+    paper_source_order: list[str] = field(default_factory=lambda: ["arxiv", "crossref", "openalex"])
     http_timeout: int = 15
+    scholarly_contact_email: str = ""          # OpenAlex/Crossref polite pool 联系邮箱
+    source_cooldown_seconds: int = 300          # 429/406 后暂停该来源的秒数，0 表示关闭
     default_limit: int = 10
     max_limit: int = 30
+
+    # ---- arXiv 统一出口：限速 / 重试 / 冷却 / 熔断 ----
+    # 相邻两次 arXiv 请求的最小间隔（秒）。arXiv 官方建议 3 秒，别调小。
+    arxiv_min_interval_seconds: float = 3.0
+    arxiv_max_retries: int = 3                  # 单次请求最多重试几次（不含首次）
+    arxiv_backoff_base_seconds: float = 2.0     # 退避基数：等待 = 基数 × 2^次数
+    arxiv_max_backoff_seconds: float = 60.0     # 单次退避上限
+    arxiv_jitter_ratio: float = 0.2             # 退避抖动比例，避免多个进程同时重试
+    arxiv_cooldown_seconds: float = 300.0       # 429/406 后整条出口的冷却时长
+    arxiv_circuit_threshold: int = 3            # 连续失败几次后熔断
+    arxiv_circuit_cooldown_seconds: float = 120.0   # 熔断后多久进入半开探测
+    arxiv_rate_limit_max_wait: float = 0.0      # 能容忍的最长限速等待（秒），0=无限等
+    # 限速器后端：memory 只在单个进程内生效；sqlite 能管住 MCP 子进程，默认用它
+    arxiv_rate_limit_backend: str = "sqlite"
+
+    # ---- 论文搜索缓存（SQLite）----
+    paper_cache_enabled: bool = True
+    cache_db_path: str = ""                     # 留空用 backend/data/paper_cache.db
+    paper_cache_ttl_search: int = 86400         # 搜索结果缓存 24 小时
+    paper_cache_ttl_paper: int = 604800         # 论文元数据缓存 7 天
+    paper_cache_max_entries: int = 2000         # 超出按最久未命中淘汰，防止无限增长
+    paper_cache_stale_fallback: bool = True     # 数据源挂了时，是否允许返回过期缓存
+    paper_cache_stale_ttl: int = 604800         # 过期缓存最多再保留多久可用于兜底
 
     # MCP：两种形态二选一
     mcp_transport: str = "auto"                      # stdio | http | sse | auto
@@ -131,6 +156,10 @@ class Settings:
     kg_default_limit: int = 200
     report_timezone_offset_hours: float = 8.0
 
+    def resolved_cache_db_path(self) -> str:
+        """论文缓存 / 限速状态共用的 SQLite 文件位置，留空就落在 backend/data/ 下。"""
+        return self.cache_db_path or str(ROOT / "backend" / "data" / "paper_cache.db")
+
     def mcp_http_headers(self) -> dict[str, str]:
         """MCP 端点要带的请求头：自定义头 + Bearer token。"""
         headers = dict(self.mcp_headers)
@@ -148,10 +177,29 @@ class Settings:
             port=_get_int("PORT", 8000),
             cors_origins=_get_list("CORS_ORIGINS", "*"),
             paper_source=_get("PAPER_SOURCE", "auto").lower(),
-            paper_source_order=_get_list("PAPER_SOURCE_ORDER", "arxiv,openalex,crossref"),
+            paper_source_order=_get_list("PAPER_SOURCE_ORDER", "arxiv,crossref,openalex"),
             http_timeout=_get_int("HTTP_TIMEOUT", 15),
+            scholarly_contact_email=_get("SCHOLARLY_CONTACT_EMAIL"),
+            source_cooldown_seconds=_get_int("SOURCE_COOLDOWN_SECONDS", 300),
             default_limit=_get_int("DEFAULT_LIMIT", 10),
             max_limit=_get_int("MAX_LIMIT", 30),
+            arxiv_min_interval_seconds=_get_float("ARXIV_MIN_INTERVAL_SECONDS", 3.0),
+            arxiv_max_retries=_get_int("ARXIV_MAX_RETRIES", 3),
+            arxiv_backoff_base_seconds=_get_float("ARXIV_BACKOFF_BASE_SECONDS", 2.0),
+            arxiv_max_backoff_seconds=_get_float("ARXIV_MAX_BACKOFF_SECONDS", 60.0),
+            arxiv_jitter_ratio=_get_float("ARXIV_JITTER_RATIO", 0.2),
+            arxiv_cooldown_seconds=_get_float("ARXIV_COOLDOWN_SECONDS", 300.0),
+            arxiv_circuit_threshold=_get_int("ARXIV_CIRCUIT_THRESHOLD", 3),
+            arxiv_circuit_cooldown_seconds=_get_float("ARXIV_CIRCUIT_COOLDOWN_SECONDS", 120.0),
+            arxiv_rate_limit_max_wait=_get_float("ARXIV_RATE_LIMIT_MAX_WAIT", 0.0),
+            arxiv_rate_limit_backend=_get("ARXIV_RATE_LIMIT_BACKEND", "sqlite").lower(),
+            paper_cache_enabled=_get_bool("PAPER_CACHE_ENABLED", True),
+            cache_db_path=_get("CACHE_DB_PATH"),
+            paper_cache_ttl_search=_get_int("PAPER_CACHE_TTL_SEARCH", 86400),
+            paper_cache_ttl_paper=_get_int("PAPER_CACHE_TTL_PAPER", 604800),
+            paper_cache_max_entries=_get_int("PAPER_CACHE_MAX_ENTRIES", 2000),
+            paper_cache_stale_fallback=_get_bool("PAPER_CACHE_STALE_FALLBACK", True),
+            paper_cache_stale_ttl=_get_int("PAPER_CACHE_STALE_TTL", 604800),
             mcp_transport=_get("MCP_TRANSPORT", "auto").lower(),
             mcp_command=cmd.split() if cmd else [],
             mcp_url=_get("MCP_URL"),

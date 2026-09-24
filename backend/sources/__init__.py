@@ -3,13 +3,22 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 from typing import Any, Callable
 
 from ..config import Settings
 from ..logging_setup import get_logger
 from . import arxiv, crossref, mock, mcp_http, mcp_stdio, mcp_ws, openalex, semanticscholar
+from .models import Paper, to_paper_dicts
+from .orchestrator import SearchOrchestrator, abort_mcp, run_with_timeout
+from .paper_cache import get_paper_cache
+from .providers import PROVIDERS
 
 log = get_logger("sources")
+
+# In-process source cooldown: after upstream rate limiting, do not hammer it again.
+_COOLDOWN_UNTIL: dict[str, float] = {}
+_COOLDOWN_LOCK = threading.Lock()
 
 # 名称 → (执行函数, 展示名)
 REGISTRY: dict[str, tuple[Callable[..., list[dict]], str]] = {
@@ -19,6 +28,35 @@ REGISTRY: dict[str, tuple[Callable[..., list[dict]], str]] = {
     "crossref": (crossref.search, "Crossref"),
     "mock": (mock.search, "mock"),
 }
+
+
+def _cooldown_remaining(name: str) -> int:
+    now = time.monotonic()
+    with _COOLDOWN_LOCK:
+        until = _COOLDOWN_UNTIL.get(name, 0.0)
+        if until <= now:
+            _COOLDOWN_UNTIL.pop(name, None)
+            return 0
+        return max(1, int(round(until - now)))
+
+
+def _mark_cooldown(name: str, error: Exception, cfg: Settings) -> None:
+    """Mark 429/406 sources so the same process does not retry immediately."""
+    if cfg.source_cooldown_seconds <= 0:
+        return
+    text = str(error).lower()
+    if not any(token in text for token in ("429", "406", "too many requests", "rate limit")):
+        return
+    with _COOLDOWN_LOCK:
+        _COOLDOWN_UNTIL[name] = time.monotonic() + cfg.source_cooldown_seconds
+
+
+def _call_registry_source(name: str, fn: Callable[..., list[dict]], keyword: str,
+                          limit: int, cfg: Settings) -> list[dict]:
+    """Pass the configured polite-pool email to OpenAlex/Crossref direct calls."""
+    if name in ("openalex", "crossref"):
+        return fn(keyword, limit, cfg.http_timeout, cfg.scholarly_contact_email)
+    return fn(keyword, limit, cfg.http_timeout)
 
 
 def _run_with_timeout(fn: Callable[[], list[dict]], timeout: int,
@@ -91,7 +129,10 @@ def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[st
     if cfg.paper_source in REGISTRY:
         fn, label = REGISTRY[cfg.paper_source]
         try:
-            return _run_with_timeout(lambda: fn(keyword, limit, cfg.http_timeout), cfg.http_timeout + 5), warnings
+            return _run_with_timeout(
+                lambda: _call_registry_source(cfg.paper_source, fn, keyword, limit, cfg),
+                cfg.http_timeout + 5,
+            ), warnings
         except Exception as e:  # noqa: BLE001
             raise _as_upstream_error(e, label) from e
 
@@ -100,22 +141,33 @@ def search_papers(keyword: str, limit: int, cfg: Settings) -> tuple[list[dict[st
     chain = [s for s in cfg.paper_source_order if s in REGISTRY or s == "mcp"] or ["arxiv", "crossref"]
     last_error: Exception | None = None
     for name in chain:
+        label = "MCP" if name == "mcp" else REGISTRY[name][1]
+        remaining = _cooldown_remaining(name)
+        if remaining:
+            warnings.append(f"来源 {label} 冷却中（剩余 {remaining}s）")
+            log.warning("来源 %s 冷却中，尝试下一个 keyword=%r 剩余=%ss", label, keyword, remaining)
+            continue
+
         if name == "mcp":
-            label = "MCP"
             try:
                 papers = _run_with_timeout(lambda: mcp_search(keyword, limit, cfg),
                                            cfg.mcp_timeout + 5, cancel=_abort_mcp)
             except Exception as e:  # noqa: BLE001
                 last_error = e
+                _mark_cooldown(name, e, cfg)
                 warnings.append(f"来源 {label} 不可用：{e}")
                 log.warning("来源 %s 不可用，尝试下一个 keyword=%r 原因=%s", label, keyword, e)
                 continue
         else:
-            fn, label = REGISTRY[name]
+            fn, _ = REGISTRY[name]
             try:
-                papers = _run_with_timeout(lambda: fn(keyword, limit, cfg.http_timeout), cfg.http_timeout + 5)
+                papers = _run_with_timeout(
+                    lambda: _call_registry_source(name, fn, keyword, limit, cfg),
+                    cfg.http_timeout + 5,
+                )
             except Exception as e:  # noqa: BLE001
                 last_error = e
+                _mark_cooldown(name, e, cfg)
                 warnings.append(f"来源 {label} 不可用：{e}")
                 log.warning("来源 %s 不可用，尝试下一个 keyword=%r 原因=%s", label, keyword, e)
                 continue

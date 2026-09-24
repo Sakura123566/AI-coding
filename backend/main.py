@@ -128,6 +128,8 @@ def health() -> dict[str, Any]:
         "environment": settings.environment,
         "paper_source": settings.paper_source,
         "paper_source_order": settings.paper_source_order,
+        "scholarly_contact_configured": bool(settings.scholarly_contact_email),
+        "source_cooldown_seconds": settings.source_cooldown_seconds,
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model if settings.llm_provider == "openai" else None,
         "llm_ready": bool(settings.llm_api_key) if settings.llm_provider == "openai" else False,

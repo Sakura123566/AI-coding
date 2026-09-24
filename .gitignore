@@ -5,6 +5,8 @@
 
 # 用户数据（SQLite：账号、会话、记忆、画像）
 backend/data/
+
+# 论文搜索缓存 + arXiv 限速状态（默认 backend/data/paper_cache.db，不进仓库）
 *.db
 *.db-wal
 *.db-shm

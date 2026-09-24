@@ -1,39 +1,27 @@
-"""arXiv 官方 Atom API：无需密钥，适合预印本/AI 方向检索。"""
+"""arXiv 官方 Atom API：无需密钥，适合预印本/AI 方向检索。
+
+这里只保留对外函数名和参数，真正的取数全部委托给 `arxiv_client.ArxivClient`——
+限速、重试、冷却、熔断、请求合并都在那一个出口里，任何调用方（包括 MCP 子进程）
+都不可能绕过。函数签名 `search(keyword, limit, timeout)` 与改造前完全一致。
+"""
 from __future__ import annotations
 
-import urllib.parse
-from xml.etree import ElementTree as ET
+from typing import Any
 
-from .base import http_get, make_paper
+from .arxiv_client import ENDPOINT, get_arxiv_client
+from .models import Paper, to_paper_dicts
 
-ATOM = "{http://www.w3.org/2005/Atom}"
-ENDPOINT = "https://export.arxiv.org/api/query"
+__all__ = ["ENDPOINT", "search", "search_papers"]
 
 
-def search(keyword: str, limit: int, timeout: int = 15) -> list[dict]:
-    params = urllib.parse.urlencode(
-        {
-            "search_query": f'all:"{keyword}"',
-            "start": 0,
-            "max_results": max(1, min(limit, 50)),
-            "sortBy": "relevance",
-            "sortOrder": "descending",
-        }
-    )
-    xml_text = http_get(f"{ENDPOINT}?{params}", timeout=timeout)
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as e:
-        raise RuntimeError(f"arXiv 返回无法解析：{e}") from e
+def search(keyword: str, limit: int, timeout: int = 15) -> list[dict[str, Any]]:
+    return get_arxiv_client().search(keyword, limit, timeout=timeout)
 
-    papers = []
-    for entry in root.findall(ATOM + "entry"):
-        title = (entry.findtext(ATOM + "title") or "").strip()
-        summary = (entry.findtext(ATOM + "summary") or "").strip()
-        published = entry.findtext(ATOM + "published") or ""
-        authors = [a.findtext(ATOM + "name") for a in entry.findall(ATOM + "author")]
-        link = entry.findtext(ATOM + "id")
-        papers.append(make_paper(len(papers) + 1, title, authors, published, summary, link, "arXiv"))
-        if len(papers) >= limit:
-            break
-    return papers
+
+def search_papers(keyword: str, limit: int, timeout: int = 15) -> list[Paper]:
+    """统一模型版：带 arXiv ID / DOI，供多源合并去重用。"""
+    return get_arxiv_client().search_papers(keyword, limit, timeout=timeout)
+
+
+def to_dicts(papers: list[Paper], limit: int | None = None) -> list[dict[str, Any]]:
+    return to_paper_dicts(papers, limit)
