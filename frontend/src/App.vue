@@ -20,9 +20,26 @@ import FavoritesView from './components/FavoritesView.vue'
 import HistoryView from './components/HistoryView.vue'
 import { useResearch } from './composables/useResearch'
 import { useKpStore, type KpMode } from './stores/knowledgeParty'
+import { useUserStore } from './stores/user'
+import UserAvatar from './components/UserAvatar.vue'
+import UserProfileDrawer from './components/UserProfileDrawer.vue'
+import AuthDialog from './components/AuthDialog.vue'
 
 const store = useKpStore()
 const { topic, submit } = useResearch()
+const userStore = useUserStore()
+userStore.init() // 启动若有 token 则异步刷新画像
+
+// —— 用户登录 / 资料 ——
+const authVisible = ref(false)
+const profileVisible = ref(false)
+function onAvatarClick() {
+  if (userStore.isLoggedIn) {
+    profileVisible.value = true
+  } else {
+    authVisible.value = true
+  }
+}
 
 // —— 布局状态 ——
 // 左：图标导航（默认只显示图标，点击第一个图标展开显示名字+近期搜索）；中：模式视图；右：方向概览
@@ -230,6 +247,7 @@ async function createSpace() {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <UserAvatar :expanded="leftExpanded" @click="onAvatarClick" />
       </div>
 
       <div v-if="leftExpanded" class="resizer resizer-left" @mousedown="startResize('left', $event)" />
@@ -353,6 +371,10 @@ async function createSpace() {
     <!-- 智能体浮标（右侧可拖动椭圆，点击弹出小对话窗，非模态不挡页面） -->
     <AgentBubble />
 
+    <!-- 用户：资料抽屉 + 登录/注册弹窗 -->
+    <UserProfileDrawer v-model="profileVisible" />
+    <AuthDialog v-model="authVisible" />
+
     <!-- 收起后的浮起展开按钮（仅右栏） -->
     <button v-if="rightCollapsed" class="rail-open rail-open-right" title="展开方向概览" @click="toggleRight">«</button>
   </div>
@@ -441,7 +463,11 @@ async function createSpace() {
 }
 .rail-bottom {
   margin-top: auto;
-  text-align: center;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
 /* 展开后的近期搜索 */
