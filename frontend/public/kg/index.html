@@ -1060,7 +1060,7 @@ document.querySelectorAll('.tab').forEach(t => {
     if(!isE){ S.scaleM = 1; S.offM = {x:0,y:0}; }
     setTimeout(() => {
       if(isE){ chartE.resize(); if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); }
-      else { chartM.resize(); renderKG(); }
+      else { chartM.resize(); loadMap(); }
     }, 30);
   };
 });
