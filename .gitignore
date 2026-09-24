@@ -21,6 +21,8 @@ venv/
 # 前端（队员2 的目录）
 node_modules/
 dist/
+# 本地多模式构建产物（mock / real 对比备份，非源码，勿提交）
+dist_*_build/
 
 # 编辑器
 .vscode/
