@@ -2,10 +2,7 @@
 import { reactive, ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../stores/user'
-import {
-  getAgentSettings,
-  putAgentSettings
-} from '../services/agent'
+import { useAgentSettings } from '../composables/useAgentSettings'
 import {
   AGENT_PERSONALITY_LABELS,
   AGENT_TONE_LABELS,
@@ -22,6 +19,7 @@ const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
 const userStore = useUserStore()
+const agent = useAgentSettings()
 const visible = ref(props.modelValue)
 
 watch(
@@ -79,8 +77,8 @@ async function loadSettings() {
   if (!userStore.token) return
   loading.value = true
   try {
-    const s = await getAgentSettings(userStore.token)
-    Object.assign(form, s)
+    const s = await agent.load(userStore.token)
+    if (s) Object.assign(form, s)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '读取智能体设置失败')
   } finally {
@@ -96,8 +94,8 @@ async function save() {
   }
   saving.value = true
   try {
-    const saved = await putAgentSettings(userStore.token, { ...form })
-    Object.assign(form, saved)
+    const saved = await agent.save(userStore.token, { ...form })
+    if (saved) Object.assign(form, saved)
     ElMessage.success('智能体设置已保存')
     visible.value = false
   } catch (e) {

@@ -14,7 +14,8 @@ import {
   Setting,
   Document,
   User,
-  SwitchButton
+  SwitchButton,
+  MagicStick
 } from '@element-plus/icons-vue'
 import TopicInput from './components/TopicInput.vue'
 import PaperList from './components/PaperList.vue'
@@ -29,6 +30,8 @@ import UserAvatar from './components/UserAvatar.vue'
 import UserProfileDrawer from './components/UserProfileDrawer.vue'
 import AgentSettingsDrawer from './components/AgentSettingsDrawer.vue'
 import WeeklyReportDrawer from './components/WeeklyReportDrawer.vue'
+import SkillManagerDrawer from './components/SkillManagerDrawer.vue'
+import { useAgentSettings } from './composables/useAgentSettings'
 import AuthDialog from './components/AuthDialog.vue'
 
 const store = useKpStore()
@@ -36,11 +39,22 @@ const { topic, submit } = useResearch()
 const userStore = useUserStore()
 userStore.init() // 启动若有 token 则异步刷新画像
 
+// 智能体设置（含语音开关/音色/语速/音调）：token 就绪即加载，供语音朗读使用
+const agentSettings = useAgentSettings()
+watch(
+  () => userStore.token,
+  (t) => {
+    if (t) agentSettings.load(t)
+  },
+  { immediate: true }
+)
+
 // —— 用户登录 / 资料 ——
 const authVisible = ref(false)
 const profileVisible = ref(false)
 const agentSettingsVisible = ref(false)
 const weeklyVisible = ref(false)
+const skillManagerVisible = ref(false)
 const popoverVisible = ref(false)
 
 // 登录后点头像 -> 在侧边头像处弹出小菜单（非居中弹窗）
@@ -55,6 +69,10 @@ function openAgentSettings() {
 function openWeekly() {
   popoverVisible.value = false
   weeklyVisible.value = true
+}
+function openSkillManager() {
+  popoverVisible.value = false
+  skillManagerVisible.value = true
 }
 // 未登录时点头像 -> 登录/注册
 function openAuth() {
@@ -304,6 +322,9 @@ async function createSpace() {
             <button class="am-item" @click="openWeekly">
               <el-icon><Document /></el-icon><span>周报</span>
             </button>
+            <button class="am-item" @click="openSkillManager">
+              <el-icon><MagicStick /></el-icon><span>技能管理</span>
+            </button>
             <div class="am-divider" />
             <button class="am-item am-danger" @click="onLogoutClick">
               <el-icon><SwitchButton /></el-icon><span>退出登录</span>
@@ -439,6 +460,7 @@ async function createSpace() {
     <UserProfileDrawer v-model="profileVisible" />
     <AgentSettingsDrawer v-model="agentSettingsVisible" />
     <WeeklyReportDrawer v-model="weeklyVisible" />
+    <SkillManagerDrawer v-model="skillManagerVisible" />
     <AuthDialog v-model="authVisible" />
 
     <!-- 收起后的浮起展开按钮（仅右栏） -->

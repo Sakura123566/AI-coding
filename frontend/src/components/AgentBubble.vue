@@ -2,6 +2,8 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useKpStore } from '@/stores/knowledgeParty'
 import EmotionAvatar from '@/components/emotion/EmotionAvatar.vue'
+import { useSpeech } from '@/composables/useSpeech'
+import { useAgentSettings } from '@/composables/useAgentSettings'
 
 // 智能体浮标：右侧可拖动的（长）椭圆，会冒小话暗示自己是智能体；
 // 点击弹出【小对话窗】（非模态浮层，不遮挡页面，可拖拽），具体对话能力由后端后续接入。
@@ -102,6 +104,24 @@ function onChatUp() {
   document.body.style.userSelect = ''
 }
 
+// —— 语音朗读 ——
+const speech = useSpeech()
+const agentSettings = useAgentSettings()
+function speakText(text: string) {
+  const s = agentSettings.state.settings
+  if (s && !s.voice_enabled) return // 总开关未启用则不朗读
+  speech.speak(text, {
+    voiceName: s?.voice_name,
+    rate: s?.voice_rate ?? 1,
+    pitch: s?.voice_pitch ?? 1,
+    lang: s?.language === 'en' ? 'en-US' : 'zh-CN'
+  })
+}
+function maybeAutoPlay(text: string) {
+  const s = agentSettings.state.settings
+  if (s && s.voice_enabled && s.voice_auto_play) speakText(text)
+}
+
 // —— 对话（占位，后端后续接入真实智能体）——
 interface Msg {
   role: 'user' | 'agent'
@@ -117,10 +137,12 @@ function send() {
   messages.value.push({ role: 'user', text: t })
   input.value = ''
   // 后端接入前的占位回复：先记下用户问题，具体对话能力由后端实现
-  messages.value.push({
+  const reply: Msg = {
     role: 'agent',
     text: '（智能体对话能力将由后端接入，敬请期待～我先把你的问题记下了）'
-  })
+  }
+  messages.value.push(reply)
+  maybeAutoPlay(reply.text)
 }
 </script>
 
@@ -165,7 +187,15 @@ function send() {
         :class="m.role"
       >
         <div class="chat-avatar">{{ m.role === 'agent' ? '🤖' : '🧑' }}</div>
-        <div class="chat-bubble">{{ m.text }}</div>
+        <div class="chat-bubble">
+          <span class="cb-text">{{ m.text }}</span>
+          <button
+            v-if="m.role === 'agent'"
+            class="cb-speak"
+            title="朗读此条"
+            @click="speakText(m.text)"
+          >🔊</button>
+        </div>
       </div>
     </div>
     <div class="chat-input">
@@ -333,6 +363,26 @@ function send() {
   background: #f2f4f8;
   color: #333;
   word-break: break-word;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.cb-text {
+  flex: 1 1 auto;
+}
+.cb-speak {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 0 2px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.cb-speak:hover {
+  opacity: 1;
 }
 .chat-row.user .chat-bubble {
   background: var(--el-color-primary);
