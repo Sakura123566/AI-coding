@@ -45,6 +45,35 @@ def check(name: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
+CONTRACT_DIR = ROOT / "docs" / "contract"
+
+
+def _field_set(value: Any) -> set[str]:
+    """取字典的键集合；列表就看第一个元素的键（用来比对"条目"的字段）。"""
+    if isinstance(value, dict):
+        return set(value)
+    if isinstance(value, list) and value:
+        return _field_set(value[0])
+    return set()
+
+
+def check_contract(label: str, sample_file: str, live: dict[str, Any],
+                   list_key: str = "") -> None:
+    """比对实际响应与冻结样例的字段：样例里有的字段，实际响应必须一个不少。
+
+    为什么功能测试全绿还不够：v0.4 把 /api/kg/* 改成登录态时，顺手把响应里的
+    `user_id` 删掉了（因为登录态下它是隐式的）——"关键词非空""权重正确"这些
+    断言照样全过。但那份样例 JSON 是**冻结给图谱负责人的输入格式**，
+    对方客户端读 response.user_id 会直接读不到。字段级的契约必须有独立断言。
+    """
+    sample = json.loads((CONTRACT_DIR / sample_file).read_text(encoding="utf-8"))
+    missing_top = _field_set(sample) - _field_set(live)
+    check(f"{label} 顶层契约字段齐全", not missing_top, f"缺少 {sorted(missing_top)}")
+    if list_key and sample.get(list_key) and live.get(list_key):
+        missing_item = _field_set(sample[list_key]) - _field_set(live[list_key])
+        check(f"{label} 条目契约字段齐全", not missing_item, f"缺少 {sorted(missing_item)}")
+
+
 # ----------------------------- 起服务 -----------------------------
 def free_port() -> int:
     with socket.socket() as s:
@@ -316,6 +345,17 @@ def phase1(client: Client, state: dict[str, Any]) -> None:
     status, body = client.call("GET", "/api/kg/health")
     check("图谱自检接口可用",
           status == 200 and body.get("status") == "ok" and body.get("total_keywords", 0) > 0, str(body))
+
+    # 冻结契约字段比对：拿 docs/contract/ 下的样例逐字段对，防止再出现
+    # "功能是好的、字段悄悄少了一个"这种回归
+    status, body = client.call("GET", "/api/kg/keywords", token=token)
+    check_contract("keywords", "kg_keywords_sample.json", body, "keywords")
+
+    status, body = client.call("GET", "/api/kg/events", token=token)
+    check_contract("events", "kg_events_sample.json", body, "events")
+
+    status, body = client.call("GET", "/api/kg/cooccurrence", token=token)
+    check_contract("cooccurrence", "kg_cooccurrence_sample.json", body, "pairs")
 
     status, body = client.call("GET", "/api/profile/searches", token=token)
     check("检索记录已落库", status == 200 and body.get("count", 0) > 0, str(body.get("count")))

@@ -5,6 +5,7 @@
   "count": 4,
   "keywords": [
     {
+      "id": 1,
       "term": "graph neural network",
       "display": "图神经网络",
       "weight": 0.94,
@@ -28,6 +29,7 @@
       ]
     },
     {
+      "id": 2,
       "term": "recommender system",
       "display": "推荐系统",
       "weight": 0.847,
@@ -47,6 +49,7 @@
       ]
     },
     {
+      "id": 3,
       "term": "knowledge graph",
       "display": "知识图谱",
       "weight": 0.715,
@@ -62,6 +65,7 @@
       ]
     },
     {
+      "id": 4,
       "term": "神经网络",
       "display": "神经网络",
       "weight": 0.715,

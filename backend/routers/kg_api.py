@@ -40,7 +40,10 @@ def keywords(limit: int = Query(settings.kg_default_limit, ge=1, le=1000),
         "last_seen": r["last_seen_at"],
         "sources": keyword_sources(r),
     } for r in rows]
-    return ok(scope="user", count=len(data), keywords=data, generated_at=now_iso())
+    # user_id 是给图谱负责人冻结契约里的字段（v0.3 就定死、样例 JSON 里有），
+    # v0.4 改成登录态之后虽然是隐式的，但契约不能让对方客户端突然读不到，照旧回传。
+    return ok(scope="user", user_id=user_id, count=len(data),
+              keywords=data, generated_at=now_iso())
 
 
 @router.get("/events", summary="我的原始研究事件流")
@@ -61,12 +64,14 @@ def events(since: str | None = Query(None, description="ISO8601"),
         f" ORDER BY id DESC LIMIT ?", (*args, limit),
     )
     items = [{
-        "type": "search", "id": f"s{r['id']}", "keyword": r["keyword"],
+        "type": "search", "id": f"s{r['id']}", "user_id": r["user_id"],
+        "keyword": r["keyword"],
         "resolved_keyword": r["resolved_keyword"], "source": r["source"],
         "result_count": r["result_count"], "session_id": r["session_id"],
         "created_at": r["created_at"],
     } for r in searches] + [{
-        "type": "chat", "id": f"m{r['id']}", "session_id": r["session_id"],
+        "type": "chat", "id": f"m{r['id']}", "user_id": r["user_id"],
+        "session_id": r["session_id"],
         "text": r["content"], "intent": r["intent"], "created_at": r["created_at"],
     } for r in chats]
     items.sort(key=lambda x: x["created_at"], reverse=True)
@@ -77,7 +82,7 @@ def events(since: str | None = Query(None, description="ISO8601"),
 def cooccurrence(limit: int = Query(1000, ge=1, le=1000),
                  user_id: int = Depends(current_user_id)) -> dict[str, Any]:
     pairs = cooccurrence_pairs(user_id, limit=limit)
-    return ok(count=len(pairs), pairs=pairs)
+    return ok(user_id=user_id, count=len(pairs), pairs=pairs)
 
 
 @router.get("/map", summary="长期记忆知识图谱")
