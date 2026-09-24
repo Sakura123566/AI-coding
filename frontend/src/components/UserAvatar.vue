@@ -9,7 +9,7 @@ const emit = defineEmits<{ (e: 'click'): void }>()
 const userStore = useUserStore()
 
 const isLoggedIn = computed(() => userStore.isLoggedIn)
-const name = computed(() => userStore.user?.name ?? '登录')
+const name = computed(() => userStore.user?.display_name ?? userStore.user?.username ?? '登录')
 const initial = computed(() => (name.value ? name.value.trim().charAt(0).toUpperCase() : '?'))
 const bg = computed(() => colorFromName(name.value))
 

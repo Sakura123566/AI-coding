@@ -3,16 +3,19 @@
 // 后端接入后把 VITE_USE_MOCK 置 'false' 即可切换，无需改 UI 代码。
 //
 // 约定端点：
-//   POST /api/auth/register  { email, password, name, age?, identity? } -> AuthResult
-//   POST /api/auth/login     { email, password }                        -> AuthResult
-//   GET  /api/user/profile   (Authorization: Bearer <token>)            -> User（含 profile）
+//   POST /api/auth/register  { username, password, display_name? } -> AuthResult
+//   POST /api/auth/login     { username, password }                -> AuthResult
+//   GET  /api/auth/me        (Bearer)                             -> { user, token_ttl }
+//   PATCH /api/auth/me       { display_name?, real_name?, age?, identity?, avatar_id? } -> { user }
+//   GET  /api/profile        (Bearer)                             -> UserPortrait
 
 import {
   type AuthResult,
   type LoginInput,
+  type ProfileUpdate,
   type RegisterInput,
   type User,
-  type UserProfile
+  type UserPortrait
 } from '../types/user'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -23,36 +26,71 @@ function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-// —— mock 数据 ——
-let mockCurrentUser: User | null = null
+// 后端统一成功包 { status:'success', ... }；错误 { status:'error', error_code, message }
+async function parseJson(res: Response): Promise<any> {
+  const data = await res.json().catch(() => ({}))
+  if (data?.status === 'error' || (!res.ok && data?.status !== 'success')) {
+    throw new Error(data?.message || `请求失败（HTTP ${res.status}）`)
+  }
+  return data
+}
 
-function mockProfile(name: string): UserProfile {
+const authHeaders = (token: string) => ({ Authorization: `Bearer ${token}` })
+
+// —— mock 数据 ——
+let mockUser: User | null = null
+let mockPortrait: UserPortrait | null = null
+
+function mockUserFrom(input: RegisterInput | LoginInput, extra?: Partial<User>): User {
+  const display_name =
+    'display_name' in input && input.display_name ? input.display_name : input.username
   return {
-    summary: `${name} 是一位对前沿研究保持好奇的探索者，喜欢在「知识派对」里快速锁定方向、沉淀知识。`,
-    facets: [
-      { label: '研究兴趣', value: '机器学习 · 知识图谱 · 文献综述' },
-      { label: '活跃时段', value: '晚间 20:00–23:00' },
-      { label: '常用功能', value: '搜索 · 收藏 · 图谱' },
-      { label: '偏好语言', value: '中文' }
-    ],
-    tags: ['好奇心强', '系统思维', '效率优先']
+    id: Math.floor(Math.random() * 1e9),
+    username: input.username,
+    display_name,
+    real_name: null,
+    age: null,
+    identity: null,
+    avatar_id: 'navi',
+    created_at: new Date().toISOString(),
+    last_login_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...extra
   }
 }
 
-function mockUserFromInput(input: LoginInput | RegisterInput, extra?: Partial<User>): User {
-  const name =
-    'name' in input && input.name ? input.name : input.email.split('@')[0] || '用户'
+function mockPortraitFor(u: User): UserPortrait {
   return {
-    id: 'u-' + Math.random().toString(36).slice(2, 10),
-    email: input.email,
-    name,
-    age: extra?.age,
-    identity: extra?.identity,
-    avatar: '',
-    bio: '',
-    profile: mockProfile(name),
-    createdAt: Date.now(),
-    ...extra
+    has_enough_data: true,
+    sample_size: 12,
+    version: 1,
+    updated_at: new Date().toISOString(),
+    profile: {
+      domains: [
+        { name: '机器学习', weight: 0.92 },
+        { name: '知识图谱', weight: 0.81 },
+        { name: '文献综述', weight: 0.64 }
+      ],
+      interests: [
+        { tag: '图神经网络', weight: 0.7, trend: 'up' },
+        { tag: '检索增强生成', weight: 0.55, trend: 'flat' },
+        { tag: '对比学习', weight: 0.4, trend: 'down' }
+      ],
+      activity: {
+        total_searches: 8,
+        total_messages: 23,
+        active_days: 5,
+        last_active_at: new Date().toISOString(),
+        daily_counts: []
+      },
+      style: {
+        avg_question_len: 24.5,
+        prefers_chinese: true,
+        asks_for_papers: 0.6,
+        summary: `${u.display_name} 是一位对前沿研究保持好奇的探索者，喜欢在「知识派对」里快速锁定方向、沉淀知识。`
+      },
+      top_keywords: [{ term: 'gnn', display: '图神经网络', weight: 0.7, times: 6 }]
+    }
   }
 }
 
@@ -60,89 +98,107 @@ function mockUserFromInput(input: LoginInput | RegisterInput, extra?: Partial<Us
 export async function register(input: RegisterInput): Promise<AuthResult> {
   if (USE_MOCK) {
     await delay(500)
-    const user = mockUserFromInput(input, { age: input.age, identity: input.identity })
-    mockCurrentUser = user
-    return { token: 'mock-token-' + user.id, user }
+    const user = mockUserFrom(input)
+    mockUser = user
+    mockPortrait = mockPortraitFor(user)
+    return { token: 'mock-token-' + user.id, token_type: 'Bearer', expires_in: 3600, user_id: user.id, user }
   }
-  // TODO(backend): POST /api/auth/register
   const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   })
-  if (!res.ok) throw new Error(`注册失败（HTTP ${res.status}）`)
-  return normalizeAuth(await res.json())
+  const data = await parseJson(res)
+  return {
+    token: data.token,
+    token_type: data.token_type || 'Bearer',
+    expires_in: data.expires_in || 0,
+    user_id: data.user_id,
+    user: data.user
+  }
 }
 
 // —— 登录 ——
 export async function login(input: LoginInput): Promise<AuthResult> {
   if (USE_MOCK) {
     await delay(500)
-    const user = mockUserFromInput(input)
-    mockCurrentUser = user
-    return { token: 'mock-token-' + user.id, user }
+    const user = mockUserFrom(input)
+    mockUser = user
+    mockPortrait = mockPortraitFor(user)
+    return { token: 'mock-token-' + user.id, token_type: 'Bearer', expires_in: 3600, user_id: user.id, user }
   }
-  // TODO(backend): POST /api/auth/login
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   })
-  if (!res.ok) throw new Error(`登录失败（HTTP ${res.status}）`)
-  return normalizeAuth(await res.json())
+  const data = await parseJson(res)
+  return {
+    token: data.token,
+    token_type: data.token_type || 'Bearer',
+    expires_in: data.expires_in || 0,
+    user_id: data.user_id,
+    user: data.user
+  }
 }
 
-// —— 拉取资料（含用户画像）——
-export async function getProfile(token: string): Promise<User> {
+// —— 当前用户（GET /api/auth/me）——
+export async function getMe(token: string): Promise<User> {
   if (USE_MOCK) {
-    await delay(350)
-    // mock 直接返回登录时构造的用户（含 profile）；未登录则给个默认访客。
-    return mockCurrentUser ?? mockUserFromInput({ email: 'guest@demo.com', password: '' }, { name: '访客' })
+    await delay(300)
+    const u = mockUser ?? mockUserFrom({ username: 'guest', password: '' }, { display_name: '访客' })
+    mockUser = u
+    return u
   }
-  // TODO(backend): GET /api/user/profile
-  const res = await fetch(`${API_BASE}/api/user/profile`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${token}` }
+  const res = await fetch(`${API_BASE}/api/auth/me`, { headers: authHeaders(token) })
+  const data = await parseJson(res)
+  return data.user
+}
+
+// —— 用户画像（GET /api/profile）——
+export async function getPortrait(token: string): Promise<UserPortrait> {
+  if (USE_MOCK) {
+    await delay(300)
+    const u = mockUser ?? mockUserFrom({ username: 'guest', password: '' }, { display_name: '访客' })
+    mockPortrait = mockPortrait ?? mockPortraitFor(u)
+    return mockPortrait
+  }
+  const res = await fetch(`${API_BASE}/api/profile`, { headers: authHeaders(token) })
+  const data = await parseJson(res)
+  return {
+    has_enough_data: !!data.has_enough_data,
+    sample_size: data.sample_size || 0,
+    version: data.version || 1,
+    updated_at: data.updated_at || '',
+    profile: data.profile
+  }
+}
+
+// —— 更新资料（PATCH /api/auth/me）——
+export async function updateProfile(token: string, patch: ProfileUpdate): Promise<User> {
+  if (USE_MOCK) {
+    await delay(300)
+    const u = mockUser ?? mockUserFrom({ username: 'guest', password: '' })
+    mockUser = { ...u, ...patch }
+    return mockUser
+  }
+  const res = await fetch(`${API_BASE}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(patch)
   })
-  if (!res.ok) throw new Error(`获取资料失败（HTTP ${res.status}）`)
-  return normalizeUser(await res.json())
+  const data = await parseJson(res)
+  return data.user
 }
 
 export async function logout(token: string): Promise<void> {
   if (USE_MOCK) {
     await delay(150)
-    mockCurrentUser = null
+    mockUser = null
     return
   }
-  // TODO(backend): POST /api/auth/logout
   await fetch(`${API_BASE}/api/auth/logout`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` }
+    headers: authHeaders(token)
   }).catch(() => {})
-}
-
-// —— 字段归一化：后端返回结构可能略有差异，统一成前端使用的字段 ——
-function normalizeAuth(raw: any): AuthResult {
-  return { token: String(raw?.token ?? ''), user: normalizeUser(raw?.user ?? raw) }
-}
-function normalizeUser(raw: any): User {
-  return {
-    id: String(raw?.id ?? ''),
-    email: String(raw?.email ?? ''),
-    name: String(raw?.name ?? raw?.email?.split('@')[0] ?? '用户'),
-    age: raw?.age ? Number(raw.age) : undefined,
-    identity: raw?.identity,
-    avatar: raw?.avatar ? String(raw.avatar) : '',
-    bio: raw?.bio ? String(raw.bio) : '',
-    profile: raw?.profile
-      ? {
-          summary: raw.profile.summary ? String(raw.profile.summary) : undefined,
-          facets: Array.isArray(raw.profile.facets)
-            ? raw.profile.facets.map((f: any) => ({ label: String(f.label), value: String(f.value) }))
-            : undefined,
-          tags: Array.isArray(raw.profile.tags) ? raw.profile.tags.map((t: any) => String(t)) : undefined
-        }
-      : undefined,
-    createdAt: raw?.createdAt ? Number(raw.createdAt) : undefined
-  }
 }

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Lock, Message } from '@element-plus/icons-vue'
+import { Lock, User } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
-import { IDENTITY_LABELS, type UserIdentity } from '../types/user'
+import { IDENTITY_PRESETS, type ProfileUpdate } from '../types/user'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -22,36 +22,48 @@ watch(visible, (v) => emit('update:modelValue', v))
 
 const tab = ref<'login' | 'register'>('login')
 
-const loginForm = reactive({ email: '', password: '' })
+const loginForm = reactive({ username: '', password: '' })
 const regForm = reactive({
-  email: '',
+  username: '',
   password: '',
-  name: '',
+  display_name: '',
   age: '' as string,
-  identity: '' as UserIdentity | ''
+  identity: ''
 })
 
 const submitting = computed(() => userStore.loading)
 
 async function onSubmit() {
   if (tab.value === 'login') {
-    if (!loginForm.email || !loginForm.password) {
-      ElMessage.warning('请输入邮箱和密码')
+    if (!loginForm.username || !loginForm.password) {
+      ElMessage.warning('请输入用户名和密码')
       return
     }
     await userStore.login({ ...loginForm })
   } else {
-    if (!regForm.email || !regForm.password || !regForm.name) {
-      ElMessage.warning('请填写邮箱、密码和姓名')
+    if (!regForm.username || !regForm.password) {
+      ElMessage.warning('请填写用户名和密码')
       return
     }
+    // 后端 register 只收 username/password/display_name；
+    // age/identity 走注册后的 saveProfile（PATCH /api/auth/me）。
     await userStore.register({
-      email: regForm.email,
+      username: regForm.username,
       password: regForm.password,
-      name: regForm.name,
-      age: regForm.age ? Number(regForm.age) : undefined,
-      identity: regForm.identity || undefined
+      display_name: regForm.display_name || undefined
     })
+    if (userStore.isLoggedIn) {
+      const extra: ProfileUpdate = {}
+      if (regForm.age) extra.age = Number(regForm.age)
+      if (regForm.identity) extra.identity = regForm.identity
+      if (extra.age !== undefined || extra.identity !== undefined) {
+        try {
+          await userStore.saveProfile(extra)
+        } catch {
+          // 资料补全是尽力而为，不阻塞注册成功
+        }
+      }
+    }
   }
 
   if (userStore.isLoggedIn) {
@@ -73,8 +85,8 @@ async function onSubmit() {
 
     <el-form label-position="top" @submit.prevent="onSubmit">
       <template v-if="tab === 'login'">
-        <el-form-item label="邮箱">
-          <el-input v-model="loginForm.email" placeholder="you@example.com" :prefix-icon="Message" />
+        <el-form-item label="用户名">
+          <el-input v-model="loginForm.username" placeholder="用户名" :prefix-icon="User" />
         </el-form-item>
         <el-form-item label="密码">
           <el-input
@@ -89,20 +101,20 @@ async function onSubmit() {
       </template>
 
       <template v-else>
-        <el-form-item label="姓名">
-          <el-input v-model="regForm.name" placeholder="你的姓名" />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="regForm.email" placeholder="you@example.com" :prefix-icon="Message" />
+        <el-form-item label="用户名">
+          <el-input v-model="regForm.username" placeholder="2-32 个字符" :prefix-icon="User" />
         </el-form-item>
         <el-form-item label="密码">
           <el-input
             v-model="regForm.password"
             type="password"
             show-password
-            placeholder="设置密码"
+            placeholder="至少 6 位"
             :prefix-icon="Lock"
           />
+        </el-form-item>
+        <el-form-item label="昵称（可选）">
+          <el-input v-model="regForm.display_name" placeholder="不填则默认用用户名" />
         </el-form-item>
         <el-form-item label="年龄（可选）">
           <el-input v-model="regForm.age" type="number" placeholder="如 22" />
@@ -110,10 +122,10 @@ async function onSubmit() {
         <el-form-item label="身份（可选）">
           <el-select v-model="regForm.identity" placeholder="选择身份" clearable style="width: 100%">
             <el-option
-              v-for="(label, key) in IDENTITY_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
+              v-for="p in IDENTITY_PRESETS"
+              :key="p.value"
+              :label="p.label"
+              :value="p.value"
             />
           </el-select>
         </el-form-item>
