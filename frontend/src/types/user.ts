@@ -93,3 +93,62 @@ export interface UserPortrait {
     top_keywords: { term: string; display: string; weight: number; times: number }[]
   }
 }
+
+// —— 智能体设置（GET/PUT /api/agent/settings）——
+// 对齐 backend/routers/agent_api.py 的 AgentSettingsBody 字段与枚举。
+export type AgentPersonality =
+  | 'rigorous_warm'
+  | 'concise_socratic'
+  | 'creative_companion'
+  | 'strict_reviewer'
+  | 'custom'
+export type AgentTone = 'professional' | 'friendly' | 'concise' | 'encouraging'
+export type AgentDetailLevel = 'brief' | 'balanced' | 'deep'
+export type AgentLanguage = 'zh-CN' | 'en'
+
+export const AGENT_PERSONALITY_LABELS: Record<AgentPersonality, string> = {
+  rigorous_warm: '严谨而温暖',
+  concise_socratic: '简洁苏格拉底式',
+  creative_companion: '创意伙伴',
+  strict_reviewer: '严格评审',
+  custom: '自定义'
+}
+export const AGENT_TONE_LABELS: Record<AgentTone, string> = {
+  professional: '专业',
+  friendly: '亲切',
+  concise: '简练',
+  encouraging: '鼓励'
+}
+export const AGENT_DETAIL_LABELS: Record<AgentDetailLevel, string> = {
+  brief: '精简',
+  balanced: '适中',
+  deep: '深入'
+}
+export const AGENT_LANGUAGE_LABELS: Record<AgentLanguage, string> = {
+  'zh-CN': '中文',
+  en: '英文'
+}
+
+export interface AgentSettings {
+  personality: AgentPersonality
+  tone: AgentTone
+  detail_level: AgentDetailLevel
+  language: AgentLanguage
+  voice_enabled: boolean
+  voice_auto_play: boolean
+  voice_name: string
+  voice_rate: number // 0.5 - 2.0
+  voice_pitch: number // 0.5 - 2.0
+  custom_instructions: string // ≤ 2000
+}
+
+// PUT 允许部分字段
+export type AgentSettingsPatch = Partial<AgentSettings>
+
+// —— 周报（GET /api/reports/weekly）——
+export interface WeeklyReport {
+  week_start: string
+  week_end: string
+  report: Record<string, unknown>
+  cached: boolean
+}

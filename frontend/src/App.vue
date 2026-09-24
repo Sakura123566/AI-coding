@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Search,
   Star,
@@ -10,7 +10,11 @@ import {
   FullScreen,
   Close,
   Expand,
-  Fold
+  Fold,
+  Setting,
+  Document,
+  User,
+  SwitchButton
 } from '@element-plus/icons-vue'
 import TopicInput from './components/TopicInput.vue'
 import PaperList from './components/PaperList.vue'
@@ -23,6 +27,8 @@ import { useKpStore, type KpMode } from './stores/knowledgeParty'
 import { useUserStore } from './stores/user'
 import UserAvatar from './components/UserAvatar.vue'
 import UserProfileDrawer from './components/UserProfileDrawer.vue'
+import AgentSettingsDrawer from './components/AgentSettingsDrawer.vue'
+import WeeklyReportDrawer from './components/WeeklyReportDrawer.vue'
 import AuthDialog from './components/AuthDialog.vue'
 
 const store = useKpStore()
@@ -33,11 +39,40 @@ userStore.init() // 启动若有 token 则异步刷新画像
 // —— 用户登录 / 资料 ——
 const authVisible = ref(false)
 const profileVisible = ref(false)
-function onAvatarClick() {
-  if (userStore.isLoggedIn) {
-    profileVisible.value = true
-  } else {
-    authVisible.value = true
+const agentSettingsVisible = ref(false)
+const weeklyVisible = ref(false)
+const popoverVisible = ref(false)
+
+// 登录后点头像 -> 在侧边头像处弹出小菜单（非居中弹窗）
+function openProfile() {
+  popoverVisible.value = false
+  profileVisible.value = true
+}
+function openAgentSettings() {
+  popoverVisible.value = false
+  agentSettingsVisible.value = true
+}
+function openWeekly() {
+  popoverVisible.value = false
+  weeklyVisible.value = true
+}
+// 未登录时点头像 -> 登录/注册
+function openAuth() {
+  authVisible.value = true
+}
+// 退出登录（带确认）
+async function onLogoutClick() {
+  popoverVisible.value = false
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
+      type: 'warning',
+      confirmButtonText: '退出',
+      cancelButtonText: '取消'
+    })
+    userStore.logout()
+    ElMessage.success('已退出登录')
+  } catch {
+    /* 用户取消 */
   }
 }
 
@@ -247,7 +282,36 @@ async function createSpace() {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <UserAvatar :expanded="leftExpanded" @click="onAvatarClick" />
+        <!-- 登录后：点头像在侧边弹出小菜单（非居中） -->
+        <el-popover
+          v-if="userStore.isLoggedIn"
+          v-model:visible="popoverVisible"
+          placement="right-start"
+          :width="208"
+          trigger="click"
+          popper-class="avatar-popover"
+        >
+          <template #reference>
+            <UserAvatar :expanded="leftExpanded" />
+          </template>
+          <div class="avatar-menu">
+            <button class="am-item" @click="openProfile">
+              <el-icon><User /></el-icon><span>我的资料</span>
+            </button>
+            <button class="am-item" @click="openAgentSettings">
+              <el-icon><Setting /></el-icon><span>智能体设置</span>
+            </button>
+            <button class="am-item" @click="openWeekly">
+              <el-icon><Document /></el-icon><span>周报</span>
+            </button>
+            <div class="am-divider" />
+            <button class="am-item am-danger" @click="onLogoutClick">
+              <el-icon><SwitchButton /></el-icon><span>退出登录</span>
+            </button>
+          </div>
+        </el-popover>
+        <!-- 未登录：点头像打开登录/注册 -->
+        <UserAvatar v-else :expanded="leftExpanded" @click="openAuth" />
       </div>
 
       <div v-if="leftExpanded" class="resizer resizer-left" @mousedown="startResize('left', $event)" />
@@ -371,8 +435,10 @@ async function createSpace() {
     <!-- 智能体浮标（右侧可拖动椭圆，点击弹出小对话窗，非模态不挡页面） -->
     <AgentBubble />
 
-    <!-- 用户：资料抽屉 + 登录/注册弹窗 -->
+    <!-- 用户：资料抽屉 + 智能体设置 + 周报 + 登录/注册弹窗 -->
     <UserProfileDrawer v-model="profileVisible" />
+    <AgentSettingsDrawer v-model="agentSettingsVisible" />
+    <WeeklyReportDrawer v-model="weeklyVisible" />
     <AuthDialog v-model="authVisible" />
 
     <!-- 收起后的浮起展开按钮（仅右栏） -->
@@ -710,5 +776,53 @@ async function createSpace() {
   cursor: pointer;
   border-radius: 6px;
   font-size: 14px;
+}
+</style>
+
+<!-- 头像弹出菜单：el-popover 默认 teleport 到 body，需非 scoped 样式 -->
+<style>
+.avatar-popover {
+  padding: 6px !important;
+}
+.avatar-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.am-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: #1f2329;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.am-item:hover {
+  background: #eef2f7;
+}
+.am-item .el-icon {
+  font-size: 16px;
+  color: #5a6b8c;
+}
+.am-item.am-danger {
+  color: #c0392b;
+}
+.am-item.am-danger .el-icon {
+  color: #c0392b;
+}
+.am-item.am-danger:hover {
+  background: #fdecec;
+}
+.am-divider {
+  height: 1px;
+  background: #eef0f2;
+  margin: 4px 0;
 }
 </style>
