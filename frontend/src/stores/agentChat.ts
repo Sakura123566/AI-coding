@@ -2,7 +2,7 @@
 // 与 user.ts / knowledgeParty.ts 同样的持久化写法，刷新不丢对话历史。
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import { sendAgentMessage, type ChatMessage } from '../services/agentChat'
+import { sendAgentMessage, deleteChatSession, type ChatMessage } from '../services/agentChat'
 import { useUserStore } from './user'
 import { useAgentSettings } from '../composables/useAgentSettings'
 
@@ -13,6 +13,8 @@ interface ChatSession {
   title: string
   messages: ChatMessage[]
   updatedAt: number
+  // 真实后端会话号（mock 模式恒为 null；切真实后端后首次发送时惰性创建并回填）
+  backendSessionId?: string | null
 }
 interface PersistShape {
   sessions: ChatSession[]
@@ -85,6 +87,14 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   function deleteSession(id: string) {
+    const target = sessions.value.find((s) => s.id === id)
+    // 真实后端：会话号存在时一并删除（best-effort，失败不阻塞 UI）
+    if (target?.backendSessionId) {
+      const userStore = useUserStore()
+      if (userStore.token) {
+        deleteChatSession(userStore.token, target.backendSessionId).catch(() => {})
+      }
+    }
     sessions.value = sessions.value.filter((s) => s.id !== id)
     if (currentId.value === id) {
       currentId.value = sessions.value[0]?.id ?? null
@@ -105,14 +115,19 @@ export const useAgentChatStore = defineStore('agentChat', () => {
         (settings?.agent_address_name && settings.agent_address_name.trim()) ||
         userStore.user?.display_name ||
         ''
-      const reply = await sendAgentMessage({
-        history: s.messages,
+      const res = await sendAgentMessage({
+        token: userStore.token || null,
+        backendSessionId: s.backendSessionId ?? null,
+        content: text,
         settings,
         addressName,
         userName: userStore.user?.display_name || '',
-        identity: userStore.user?.identity || null
+        identity: userStore.user?.identity || null,
+        history: s.messages
       })
-      s.messages.push({ role: 'agent', text: reply })
+      s.messages.push({ role: 'agent', text: res.reply, emotion: res.emotion, papers: res.papers })
+      // 回填真实后端会话号，后续消息复用同一会话（多轮上下文）
+      if (res.backendSessionId) s.backendSessionId = res.backendSessionId
       // 用首条用户消息生成会话标题
       const firstUser = s.messages.find((m) => m.role === 'user')
       if (firstUser && s.title === '新对话') {

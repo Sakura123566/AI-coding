@@ -101,8 +101,10 @@ function defaultMsgFor(errorCode: string): string {
   }
 }
 
+// 默认 mock：让「等后端」阶段的 UI 骨架也能直接演示。
+// 接真实后端时把 VITE_USE_MOCK 置 'false' 即可切换，无需改 UI 代码。
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'false') === 'true'
+const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true'
 
 // 字段归一化：后端返回的字段名可能略有差异，这里统一成前端使用的字段。
 function normalizePaper(p: any): Paper {
