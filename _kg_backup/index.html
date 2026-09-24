@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>知识图谱 · 探索型 + 长期图谱（拖拽 / 滚轮缩放 / 悬停显名 / 分类配色 / 搜索锁定）</title>
+<title>知识图谱 · 优化版（拖拽 / 滚轮缩放 / 悬停显名 / 分类配色 / 搜索锁定）</title>
 <script src="./echarts.min.js"></script>
 <style>
   :root{
@@ -94,33 +94,6 @@
   .field input[type=text],.field select{width:100%;}
   .danger{background:#fdecec;color:var(--danger);}
   .catpill{font-size:11px;padding:2px 9px;border-radius:999px;color:#fff;display:inline-block;}
-
-  /* —— 长期图谱：节点详情 / 利弊分析 —— */
-  .kg-meta{display:flex;flex-direction:column;gap:7px;margin-bottom:4px;}
-  .kg-kv{display:flex;justify-content:space-between;font-size:12.5px;border-bottom:1px dashed var(--line);padding-bottom:6px;}
-  .kg-kv span:first-child{color:var(--sub);}
-  .kg-kv span:last-child{color:var(--ink);font-weight:600;}
-  .an-summary{font-size:13px;line-height:1.75;color:#33394a;background:#f7f9fc;border-radius:10px;padding:10px 12px;}
-  .an-block{margin-top:11px;}
-  .an-h{font-size:12.5px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:6px;}
-  .an-pro{color:#1f9d77;}
-  .an-con{color:var(--danger);}
-  .an-next{color:var(--brand);}
-  .an-ul{margin:0;padding-left:18px;}
-  .an-ul li{font-size:12.5px;line-height:1.7;color:#4a5160;margin-bottom:3px;}
-  .an-mode{font-size:11px;color:#aab2c0;margin-top:9px;}
-  .evsrc{font-size:11px;color:var(--brand);margin-left:6px;}
-  .evt{font-size:11px;color:#aab2c0;margin-top:2px;}
-  .evans{font-size:12px;color:#5a6377;margin-top:3px;line-height:1.6;}
-
-  /* 提示条 */
-  .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-12px);z-index:60;
-         padding:10px 18px;border-radius:11px;font-size:13.5px;box-shadow:0 6px 22px rgba(23,40,80,.18);
-         opacity:0;transition:.22s;pointer-events:none;color:#fff;max-width:80vw;}
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-  .toast.info{background:#2f5fe0;}
-  .toast.ok{background:#1f9d77;}
-  .toast.err{background:#e2554f;}
 </style>
 </head>
 <body>
@@ -129,7 +102,7 @@
   <div class="row">
     <div class="tabs">
       <div class="tab on" data-tab="explore">探索型</div>
-      <div class="tab" data-tab="memory">长期图谱</div>
+      <div class="tab" data-tab="memory">记忆型</div>
     </div>
     <div class="divider"></div>
 
@@ -152,15 +125,18 @@
     </div>
 
     <div id="barMemory" class="sub hidden">
-      <button id="kgRefresh" class="ghost">刷新图谱</button>
-      <button id="kgClear" class="danger">清空图谱</button>
-      <span class="lbl">分类</span>
-      <select id="kgFilter"><option value="all">全部</option></select>
-      <div class="seg" id="kgModeSeg">
+      <div class="seg" id="memModeSeg">
         <button data-mode="web" class="on">蛛网状</button>
         <button data-mode="radial">放射状</button>
       </div>
-      <span class="hint">点击节点查看详情 / 利弊 / 删除</span>
+      <button id="simTurnBtn">模拟一轮对话</button>
+      <span class="lbl">类型</span>
+      <select id="memFilter">
+        <option value="all">全部</option>
+        <option value="inspiration">只看灵感</option>
+        <option value="casual">只看普通提问</option>
+      </select>
+      <span class="hint">点击节点可编辑 / 删除</span>
     </div>
 
     <div class="divider"></div>
@@ -224,52 +200,39 @@
   </aside>
 
   <aside id="sideMemory" class="hidden">
-    <div class="card" id="kgOverview">
-      <h3>长期知识图谱 <span id="kgCount" class="badge b-hit"></span></h3>
-      <div class="hint" id="kgHint">这是你长期研究中沉淀的关键词网络。点击任意主题节点，可查看详情、生成利弊分析、或删除分支。</div>
-      <div class="card" style="margin-top:10px;">
-        <h3>分类图例</h3>
-        <div class="legend" id="kgLegendBox" style="flex-direction:column;gap:7px;"></div>
+    <div class="card">
+      <h3>记忆节点</h3>
+      <div class="hint" id="memTip">点击图中节点，在此编辑标题 / 类型 / 状态，或删除无用信息。</div>
+    </div>
+    <div class="card" id="memEditCard" style="display:none;">
+      <h3>编辑节点</h3>
+      <div class="field"><label>标题</label><input type="text" id="memLabel" /></div>
+      <div class="field"><label>类型</label>
+        <select id="memType">
+          <option value="phase">对话阶段</option>
+          <option value="inspiration">灵感</option>
+          <option value="casual">普通提问</option>
+        </select></div>
+      <div class="field"><label>状态</label>
+        <select id="memStatus">
+          <option value="confirmed">有效</option>
+          <option value="draft">待更新</option>
+          <option value="deprecated">已废弃</option>
+        </select></div>
+      <div style="display:flex;gap:8px;">
+        <button id="memSave" style="flex:1;">保存</button>
+        <button id="memDel" class="danger">删除</button>
       </div>
     </div>
-
-    <div class="card hidden" id="kgDetailCard">
-      <h3>节点详情 <span id="kgDetailBadge"></span></h3>
-      <div class="kg-meta" id="kgMeta"></div>
-      <div class="rel hidden" id="kgEventsBox"><h4>对话回溯</h4><div id="kgEvents"></div></div>
-      <div id="kgAnalysisBox" class="hidden">
-        <h4 style="margin:12px 0 7px;font-size:12px;color:var(--sub);font-weight:600;">利弊分析</h4>
-        <div id="kgAnalysis"></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:14px;">
-        <button id="kgAnalyze" style="flex:1;">生成利弊分析</button>
-        <button id="kgDelete" class="danger">删除分支</button>
-      </div>
+    <div class="card">
+      <h3>图例 · 类型配色</h3>
+      <div class="legend" id="memLegendBox" style="flex-direction:column;gap:7px;"></div>
     </div>
   </aside>
 </main>
 
-<div id="toast" class="toast info"></div>
-
 <script>
-/* ============================ 后端配置 ============================
-   长期图谱（记忆型）数据来源开关：
-   - useMock = true（默认）：使用页面内置样例，保证部署页 / 无后端时也能演示。
-   - useMock = false 且 base 非空：调用真实后端 /api/kg/*（需先在主应用登录，
-     登录态通过 localStorage['kp-user-v2'] 的 token 自动带入；未登录会回退内置样例）。
-   接真实后端时把下面 base 改成你的后端地址（如 'http://127.0.0.1:8000'）并置 useMock=false。
-*/
-const KG_API = { base: '', useMock: true };
-function apiEnabled(){ return !KG_API.useMock && !!KG_API.base; }
-function getToken(){ try{ const d = JSON.parse(localStorage.getItem('kp-user-v2') || '{}'); return d && d.token ? d.token : ''; }catch(e){ return ''; } }
-function authH(){ const t = getToken(); return t ? { Authorization: 'Bearer ' + t } : {}; }
-async function apiGet(path){ const r = await fetch(KG_API.base + path, { headers: authH() }); if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
-async function apiPost(path, body){ const r = await fetch(KG_API.base + path, { method:'POST', headers:{'Content-Type':'application/json', ...authH()}, body: body ? JSON.stringify(body) : undefined }); if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
-async function apiDelete(path){ const r = await fetch(KG_API.base + path, { method:'DELETE', headers: authH() }); if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
-function unwrap(j){ if(j && j.status === 'error') throw new Error(j.message || '请求失败'); return (j && j.status === 'success') ? j : j; }
-function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-/* ============================ mock 数据（探索型） ============================ */
+/* ============================ mock 数据 ============================ */
 const KG = {
   '机器学习':[['神经网络',.92],['决策树',.85],['强化学习',.81],['聚类',.78],['特征工程',.74],['支持向量机',.70],['贝叶斯',.66]],
   '神经网络':[['深度学习',.90],['反向传播',.82],['激活函数',.78],['感知机',.70]],
@@ -304,33 +267,16 @@ const DOMAIN = {
   ]
 };
 
-/* ============================ mock 数据（长期图谱 / 记忆型） ============================ */
-const MOCK_MAP = {
+let MEMORY = {
   nodes:[
-    {id:1,term:'机器学习',label:'机器学习',category:'学习算法',weight:0.96,times:22,first_seen:'2026-08-01',last_seen:'2026-09-20'},
-    {id:2,term:'神经网络',label:'神经网络',category:'模型架构',weight:0.92,times:18,first_seen:'2026-08-03',last_seen:'2026-09-18'},
-    {id:3,term:'深度学习',label:'深度学习',category:'模型架构',weight:0.88,times:16,first_seen:'2026-08-05',last_seen:'2026-09-15'},
-    {id:4,term:'强化学习',label:'强化学习',category:'学习算法',weight:0.78,times:11,first_seen:'2026-08-10',last_seen:'2026-09-12'},
-    {id:5,term:'图神经网络',label:'图神经网络',category:'模型架构',weight:0.74,times:9,first_seen:'2026-08-20',last_seen:'2026-09-10'},
-    {id:6,term:'贝叶斯方法',label:'贝叶斯方法',category:'数学基础',weight:0.62,times:7,first_seen:'2026-08-15',last_seen:'2026-09-02'},
-    {id:7,term:'特征工程',label:'特征工程',category:'特征工程',weight:0.58,times:6,first_seen:'2026-08-12',last_seen:'2026-09-01'},
-    {id:8,term:'模型评估',label:'模型评估',category:'评估应用',weight:0.55,times:5,first_seen:'2026-08-18',last_seen:'2026-08-30'},
-    {id:9,term:'Transformer',label:'Transformer',category:'模型架构',weight:0.70,times:8,first_seen:'2026-08-22',last_seen:'2026-09-08'},
-    {id:10,term:'聚类',label:'聚类',category:'学习算法',weight:0.50,times:4,first_seen:'2026-08-25',last_seen:'2026-08-28'},
+    {id:'m1',label:'阶段1 提出知识图谱构想',type:'phase',status:'confirmed',imp:1.0},
+    {id:'m2',label:'灵感：回退与星星图合并',type:'inspiration',status:'confirmed',imp:0.8},
+    {id:'m3',label:'普通提问：DeepSeek 计费',type:'casual',status:'confirmed',imp:0.6},
+    {id:'m4',label:'阶段2 敲定技术路线',type:'phase',status:'confirmed',imp:0.95},
+    {id:'m5',label:'灵感：时间线用引用溯源',type:'inspiration',status:'confirmed',imp:0.75},
+    {id:'m6',label:'阶段3 原型迭代与接口对齐',type:'phase',status:'draft',imp:0.7},
   ],
-  edges:[
-    {source:'机器学习',target:'神经网络',weight:14},
-    {source:'机器学习',target:'强化学习',weight:9},
-    {source:'机器学习',target:'特征工程',weight:8},
-    {source:'机器学习',target:'贝叶斯方法',weight:4},
-    {source:'机器学习',target:'模型评估',weight:5},
-    {source:'机器学习',target:'聚类',weight:3},
-    {source:'神经网络',target:'深度学习',weight:13},
-    {source:'深度学习',target:'Transformer',weight:10},
-    {source:'图神经网络',target:'深度学习',weight:6},
-    {source:'图神经网络',target:'神经网络',weight:5},
-    {source:'特征工程',target:'深度学习',weight:4},
-  ]
+  edges:[['m1','m2'],['m1','m3'],['m1','m4'],['m4','m5'],['m4','m6'],['m2','m6']]
 };
 
 /* ============================ 分类 / 配色 ============================ */
@@ -358,12 +304,13 @@ function legendColor(cat){ const h=(CATEGORIES[cat]||CATEGORIES['通用衍生'])
 
 /* ============================ 视图状态 ============================ */
 const LABEL_ZOOM = 1.7;
-let S = { tab:'explore', mode:'web', center:'机器学习', tone:'pro', len:2,
-          trail:['机器学习'], idx:0, showAll:false,
-          scaleE:1, offE:{x:0,y:0}, scaleM:1, offM:{x:0,y:0}, locked:null,
-          kgMode:'web' };
+let S = { tab:'explore', mode:'web', memMode:'web', center:'机器学习', tone:'pro', len:2,
+          trail:['机器学习'], idx:0, memFilter:'all', memSel:null,
+          showAll:false,
+          scaleE:1, offE:{x:0,y:0}, scaleM:1, offM:{x:0,y:0}, locked:null };
 const chartE = echarts.init(document.getElementById('chartExplore'));
 const chartM = echarts.init(document.getElementById('chartMemory'));
+const TYPE_COLOR = { phase:'#2f5fe0', inspiration:'#e0a12b', casual:'#9aa3b2' };
 
 function curScale(which){ return which==='E' ? S.scaleE : S.scaleM; }
 function curOff(which){ return which==='E' ? S.offE : S.offM; }
@@ -476,7 +423,7 @@ function buildTree(center, perLevel, maxDepth, cap){
   return { nodes:nodes, links:links };
 }
 
-let EXP = null, TL = null;
+let EXP = null, TL = null, MEMOBJ = null;
 let hoverE = null, hoverM = null;
 
 function computeExplore(){
@@ -508,6 +455,11 @@ function paintExplore(hover, merge){
     source:r.source, target:r.target,
     lineStyle:{ width:0.9, opacity:(S.locked?0.1:0.7), color:'#cbd8ec' }
   }));
+  // 必须用 notMerge（replace）重绘：ECharts 在浏览器中 merge 模式不会重新渲染 graph 节点的
+  // label.show 开关（round 11 实测名字不浮现），放大后小节点名字因此不显示。改用 notMerge 强制重绘标签。
+  // 视图保持：zoom 用自跟踪的 S.scaleE（getOption().zoom 在 roam 后恒为 1 不可靠）；
+  // center 故意省略 —— 让 left/right/top/bottom 盒模型自动居中。上一轮显式传 center:[W/2,H/2]
+  // 与该盒模型冲突，把整图推出屏幕（"图谱消失"真因）。平移(拖拽)会在重绘时复位到居中，属已知取舍。
   const zw = curScale('E');
   chartE.setOption({
     animation:false, tooltip:{ show:false },
@@ -560,6 +512,7 @@ function paintTimeline(hover, merge){
     const show = labelVisible(n.level,'E') || (hover && (n.id===hover || neighbors.has(n.id)));
     return circleNode(n.id, n.label, n.level, n.bx, n.by, n.cat, n.imp, 'E', { color:n.color, forceLabel: show });
   });
+  // notMerge 重绘（理由同 paintExplore）：强制重渲染标签；zoom 自跟踪、center 省略由盒模型居中
   const zw = curScale('E');
   chartE.setOption({
     animation:false, tooltip:{ show:false },
@@ -639,60 +592,7 @@ function setCenter(name, mode){
   renderExplore();
 }
 
-/* ============================ 长期图谱（记忆型 / 后端 /api/kg/*） ============================ */
-let KGNODES = [], KG_TREE = [], KG_CO = [];
-let KG_FILTER = 'all', KG_SEL = null, KG_OBJ = null;
-
-function normalizeMap(j){
-  const d = unwrap(j);
-  const nodes = (d.nodes || []).map(n => ({
-    id:String(n.id), term:String(n.term || ''), label:String(n.label || n.term || '节点'),
-    category:String(n.category || 'other'), weight:Number(n.weight || 0), times:Number(n.times || 0),
-    first_seen:n.first_seen || '', last_seen:n.last_seen || ''
-  }));
-  const termToId = {}; nodes.forEach(n => { if(n.term) termToId[n.term] = n.id; });
-  const co = []; (d.edges || []).forEach(e => {
-    const s = termToId[e.source], t = termToId[e.target];
-    if(s && t && s !== t) co.push({ source:s, target:t, weight:Number(e.weight || 1) });
-  });
-  const tree = nodes.map(n => ({ source:'root', target:n.id }));
-  return { nodes, tree, co };
-}
-function mockMap(){
-  const nodes = MOCK_MAP.nodes.map(n => ({ ...n }));
-  const termToId = {}; nodes.forEach(n => termToId[n.term] = String(n.id));
-  const co = MOCK_MAP.edges
-    .map(e => ({ source:termToId[e.source], target:termToId[e.target], weight:Number(e.weight || 1) }))
-    .filter(e => e.source && e.target);
-  const tree = nodes.map(n => ({ source:'root', target:String(n.id) }));
-  return { nodes, tree, co };
-}
-
-async function loadMap(){
-  let data;
-  if(apiEnabled()){
-    try{
-      const j = await apiGet('/api/kg/map');
-      data = normalizeMap(j);
-    }catch(e){
-      showToast('加载真实图谱失败：' + e.message + '（已回退内置样例）', 'err');
-      data = mockMap();
-    }
-  } else {
-    data = mockMap();
-  }
-  KGNODES = data.nodes; KG_TREE = data.tree; KG_CO = data.co;
-  buildKgFilter();
-  renderKG();
-}
-
-function buildKgFilter(){
-  const sel = document.getElementById('kgFilter');
-  const cats = Array.from(new Set(KGNODES.map(n => n.category))).sort();
-  sel.innerHTML = '<option value="all">全部</option>' + cats.map(c => '<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
-  sel.value = KG_FILTER;
-}
-
+/* ============================ 记忆型 ============================ */
 function spanningTree(rootId, allIds, pairs){
   const adj = {};
   allIds.forEach(id => adj[id] = []);
@@ -708,210 +608,84 @@ function spanningTree(rootId, allIds, pairs){
   allIds.forEach(id => { if(!seen.has(id) && id !== rootId){ seen.add(id); order.push(id); links.push({source:rootId, target:id, score:.5}); } });
   return { order:order, links:links };
 }
-function computeKG(){
-  const f = KG_FILTER;
-  const list = KGNODES.filter(n => f === 'all' || n.category === f);
+function computeMemory(){
+  const f = S.memFilter;
+  const list = MEMORY.nodes.filter(n => f === 'all' || n.type === f);
   const ids = list.map(n => n.id), idSet = new Set(ids);
-  const pairs = KG_TREE.filter(pr => idSet.has(pr.source) && idSet.has(pr.target)).map(pr => [pr.source, pr.target]);
-  const rootId = 'root';
-  const st = spanningTree(rootId, ids, pairs);
+  const pairs = MEMORY.edges.filter(pr => idSet.has(pr[0]) && idSet.has(pr[1]));
+  const rootNode = list.find(n => n.type === 'phase') || list[0];
+  const st = spanningTree(rootNode.id, ids, pairs);
   const kids = {}; ids.forEach(id => kids[id] = []);
   st.links.forEach(l => { if(kids[l.source]) kids[l.source].push(l.target); });
   const W = chartM.getWidth(), H = chartM.getHeight();
-  const rt = radialTree(rootId, kids, W, H);
-  const labelOf = {}, catOf = {}, impOf = {}, wOf = {};
-  list.forEach(n => { labelOf[n.id] = n.label; catOf[n.id] = n.category; impOf[n.id] = n.weight; wOf[n.id] = n.weight; });
-  labelOf['root'] = '我的研究'; catOf['root'] = 'root'; impOf['root'] = 1; wOf['root'] = 1;
-  const allIds = ids.concat(['root']);
-  const base = st.order.filter(id => rt.pos[id]).map(id => ({
-    id, level: rt.dep[id]||0, bx: rt.pos[id].x, by: rt.pos[id].y,
-    cat: catOf[id] || 'other', imp: impOf[id] || 0.6, label: labelOf[id] || id, isRoot: id === 'root'
-  }));
+  const rt = radialTree(rootNode.id, kids, W, H);
+  const rings = (S.memMode === 'web') ? ringThreads(list.map(n => ({id:n.id})), rt) : [];
+  const labelOf = {}, colorOf = {}, impOf = {};
+  list.forEach(n => { labelOf[n.id] = n.label; colorOf[n.id] = TYPE_COLOR[n.type] || '#9aa3b2'; impOf[n.id] = n.imp != null ? n.imp : 0.6; });
+  const base = st.order.filter(id => rt.pos[id]).map(id => ({ id, level: rt.dep[id]||0, bx: rt.pos[id].x, by: rt.pos[id].y, cat: list.find(n=>n.id===id).type, imp: impOf[id], label: labelOf[id], color: colorOf[id] }));
   const adj = {};
   st.links.forEach(l => { (adj[l.source]=adj[l.source]||new Set()).add(l.target); (adj[l.target]=adj[l.target]||new Set()).add(l.source); });
-  const co = KG_CO.filter(r => idSet.has(r.source) && idSet.has(r.target));
-  KG_OBJ = { base, links: st.links, co, adj, wOf };
+  MEMOBJ = { base, links: st.links, rings, adj };
 }
-function paintKG(hover, merge){
-  if(!KG_OBJ) computeKG();
-  const neighbors = hover ? (KG_OBJ.adj[hover] || new Set()) : new Set();
+function paintMemory(hover, merge){
+  if(!MEMOBJ) computeMemory();
+  const neighbors = hover ? (MEMOBJ.adj[hover] || new Set()) : new Set();
   const lockedNeighbors = new Set();
-  if(S.locked) KG_OBJ.links.forEach(l => { if(l.source===S.locked) lockedNeighbors.add(l.target); if(l.target===S.locked) lockedNeighbors.add(l.source); });
-  const nData = KG_OBJ.base.map(n => {
+  if(S.locked) MEMOBJ.links.forEach(l => { if(l.source===S.locked) lockedNeighbors.add(l.target); if(l.target===S.locked) lockedNeighbors.add(l.source); });
+  const nData = MEMOBJ.base.map(n => {
     const show = labelVisible(n.level,'M') || (hover && (n.id===hover || neighbors.has(n.id)));
-    const color = n.isRoot ? '#2f5fe0' : colorFor(n.cat, n.imp);
-    return circleNode(n.id, n.label, n.level, n.bx, n.by, n.cat, n.imp, 'M', { color, neighbor: lockedNeighbors.has(n.id), forceLabel: show });
+    return circleNode(n.id, n.label, n.level, n.bx, n.by, n.cat, n.imp, 'M', { color: n.color, neighbor: lockedNeighbors.has(n.id), forceLabel: show });
   });
-  const spoke = KG_OBJ.links.map(l => ({
+  const links = MEMOBJ.links.map(l => ({
     source:l.source, target:l.target,
-    lineStyle:{ width: 0.8 + (KG_OBJ.wOf[l.target]||0.5)*3.2,
-      opacity:(S.locked && l.source!==S.locked && l.target!==S.locked)?0.12:0.5 + (KG_OBJ.wOf[l.target]||0.5)*0.35, color:'#a9bcd8' }
-  }));
-  const coLinks = (S.kgMode === 'web') ? KG_CO.filter(r => true).map(r => ({
+    lineStyle:{ width:1.7, color:'#c3cbdb', opacity:(S.locked && l.source!==S.locked && l.target!==S.locked)?0.12:.9 }
+  })).concat(MEMOBJ.rings.map(r => ({
     source:r.source, target:r.target,
-    lineStyle:{ width:0.6 + r.weight*0.4, opacity:(S.locked?0.1:0.55), color:'#cbd8ec' }
-  })) : [];
+    lineStyle:{ width:0.8, color:'#dee4ef', opacity:(S.locked?0.1:.6) }
+  })));
+  // notMerge 重绘（理由同 paintExplore）：强制重渲染标签；zoom 自跟踪、center 省略由盒模型居中
   const zw = curScale('M');
   chartM.setOption({
     animation:false, tooltip:{show:false},
-    series:[{ type:'graph', layout:'none', roam:true, draggable:false, zoom: zw, data:nData, links:spoke.concat(coLinks), emphasis:{ focus:'adjacency' } }]
+    series:[{ type:'graph', layout:'none', roam:true, draggable:false, zoom: zw, data:nData, links:links, emphasis:{ focus:'adjacency' } }]
   }, !merge);
   chartM.off('click'); chartM.off('mouseover'); chartM.off('mouseout');
-  chartM.on('click', p => { if(p.dataType==='node'){ if(p.name !== 'root') openNodeDetail(p.name); } });
-  chartM.on('mouseover', p => { if(p.dataType==='node'){ hoverM=p.name; paintKG(p.name, false); } });
-  chartM.on('mouseout', p => { if(p.dataType==='node'){ hoverM=null; paintKG(null, false); } });
+  chartM.on('click', p => { if(p.dataType==='node'){ const n = MEMORY.nodes.find(x => x.id === p.name); if(n) openMemEdit(n); } });
+  chartM.on('mouseover', p => { if(p.dataType==='node'){ hoverM=p.name; paintMemory(p.name, false); } });
+  chartM.on('mouseout', p => { if(p.dataType==='node'){ hoverM=null; paintMemory(null, false); } });
 }
-function renderKG(){ computeKG(); paintKG(null, false); renderKgCount(); renderKGLegend(); }
-function renderKgCount(){
-  const el = document.getElementById('kgCount');
-  if(el) el.textContent = KGNODES.length + ' 个主题';
-}
-function renderKGLegend(){
-  const mb = document.getElementById('kgLegendBox'); if(!mb) return;
-  const cats = Array.from(new Set(KGNODES.map(n => n.category))).sort();
-  if(!cats.length){ mb.innerHTML = '<span class="hint">暂无节点</span>'; return; }
-  mb.innerHTML = cats.map(c => {
-    const n = KGNODES.filter(x => x.category === c).length;
-    return '<span class="lg"><i style="background:'+legendColor(c)+'"></i>'+esc(c)+'（'+n+'）</span>';
-  }).join('');
-}
+function renderMemory(){ computeMemory(); paintMemory(null, false); }
 
-function normalizeDetail(j){
-  const d = unwrap(j);
-  const n = d.node || {};
-  const node = {
-    id:String(n.id), term:String(n.term || ''), label:String(n.label || n.term || '节点'),
-    category:String(n.category || 'other'), weight:Number(n.weight || 0), times:Number(n.times || 0),
-    first_seen:n.first_seen || '', last_seen:n.last_seen || ''
-  };
-  const events = (d.events || []).map(e => ({
-    type:e.type, question:e.question || '', answer:e.answer || '',
-    created_at:e.created_at || '', session_title:e.session_title || ''
-  }));
-  return { node, events, analysis: d.analysis || null };
+function openMemEdit(n){
+  S.memSel = n.id;
+  document.getElementById('memEditCard').style.display = 'block';
+  document.getElementById('memLabel').value = n.label;
+  document.getElementById('memType').value = n.type;
+  document.getElementById('memStatus').value = n.status;
 }
-function mockDetail(id){
-  const n = KGNODES.find(x => String(x.id) === String(id));
-  if(!n) return { node:{id,term:'',label:'',category:'other',weight:0,times:0,first_seen:'',last_seen:''}, events:[], analysis:null };
-  const events = [
-    { type:'search', question:'关于「'+n.term+'」的检索', answer:'返回了若干相关论文与综述，初步建立了该方向的文献框架。', created_at:n.last_seen, session_title:'研究会话' },
-    { type:'chat', question:'怎么理解「'+n.term+'」的核心思想？', answer:'围绕其形式化定义与典型应用场景做了一次讲解。', created_at:n.first_seen, session_title:'研究会话' },
-  ];
-  return { node:n, events, analysis: mockAnalysis(n) };
-}
-function mockAnalysis(n){
-  const term = n.term || n.label, cat = n.category, w = n.weight;
-  return {
-    summary: '“'+term+'”在你的长期研究中出现 '+n.times+' 次，属于「'+cat+'」方向，是当前知识体系的'+(w>0.7?'核心':'重要')+'节点，已与多个主题形成共现关联。',
-    pros:['已形成可追踪的研究时间线，便于后续复盘。','可与同领域其他主题形成共现分支，扩展关联网络。'],
-    cons:['当前记录仍不足以判断方法可靠性或结论边界。','需要回到论文原文核对证据，不能仅凭对话结论。'],
-    next_steps:['为“'+term+'”选择 2-3 篇代表论文做对比阅读。','记录支持、反对与尚未验证的证据。','下次对话时明确一个可验证的问题。'],
-    mode:'heuristic'
-  };
-}
-
-function openNodeDetail(id){
-  KG_SEL = id;
-  let d;
-  if(apiEnabled()){
-    apiGet('/api/kg/nodes/' + encodeURIComponent(id))
-      .then(j => { renderKGDetail(normalizeDetail(j)); })
-      .catch(e => { showToast('加载节点详情失败：' + e.message, 'err'); });
-    return;
-  }
-  renderKGDetail(mockDetail(id));
-}
-function renderKGDetail(d){
-  const node = d.node;
-  KG_SEL = String(node.id);
-  document.getElementById('kgOverview').classList.add('hidden');
-  document.getElementById('kgDetailCard').classList.remove('hidden');
-  document.getElementById('kgDetailBadge').innerHTML = '';
-  const meta = document.getElementById('kgMeta');
-  meta.innerHTML =
-    '<div class="kg-kv"><span>分类</span><span><span class="catpill" style="background:'+legendColor(node.category)+'">'+esc(node.category)+'</span></span></div>' +
-    '<div class="kg-kv"><span>重要程度</span><span>'+Math.round((node.weight||0)*100)+'%</span></div>' +
-    '<div class="kg-kv"><span>出现次数</span><span>'+String(node.times||0)+'</span></div>' +
-    '<div class="kg-kv"><span>首次出现</span><span>'+esc(node.first_seen||'—')+'</span></div>' +
-    '<div class="kg-kv"><span>最近出现</span><span>'+esc(node.last_seen||'—')+'</span></div>';
-  const evBox = document.getElementById('kgEventsBox'), evList = document.getElementById('kgEvents');
-  if(d.events && d.events.length){
-    evBox.classList.remove('hidden');
-    evList.innerHTML = d.events.slice(0,12).map(e => {
-      const q = esc((e.question||'').slice(0,140));
-      const a = esc((e.answer||'').slice(0,180));
-      const t = e.created_at ? new Date(e.created_at).toLocaleString('zh-CN') : '';
-      const src = e.session_title ? '<span class="evsrc">'+esc(e.session_title)+'</span>' : '';
-      return '<div class="rel-item"><b>'+q+'</b>'+src+(t?'<div class="evt">'+esc(t)+'</div>':'')+(a?'<div class="evans">'+a+'</div>':'')+'</div>';
-    }).join('');
-  } else { evBox.classList.add('hidden'); }
-  renderKGAnalysis(d.analysis, false);
-}
-function renderKGAnalysis(a, loading){
-  const box = document.getElementById('kgAnalysisBox'), el = document.getElementById('kgAnalysis');
-  if(loading){ box.classList.remove('hidden'); el.innerHTML = '<div class="hint">⏳ 正在生成利弊分析…</div>'; return; }
-  if(!a){ box.classList.remove('hidden'); el.innerHTML = '<div class="hint">尚未生成利弊分析，点击「生成利弊分析」。</div>'; return; }
-  box.classList.remove('hidden');
-  const pros = (a.pros||[]).map(x => '<li>'+esc(x)+'</li>').join('');
-  const cons = (a.cons||[]).map(x => '<li>'+esc(x)+'</li>').join('');
-  const next = (a.next_steps||[]).map(x => '<li>'+esc(x)+'</li>').join('');
-  el.innerHTML =
-    '<div class="an-summary">'+esc(a.summary||'')+'</div>' +
-    (pros?'<div class="an-block"><div class="an-h an-pro">✓ 优势 / 价值</div><ul class="an-ul">'+pros+'</ul></div>':'') +
-    (cons?'<div class="an-block"><div class="an-h an-con">⚠ 风险 / 局限</div><ul class="an-ul">'+cons+'</ul></div>':'') +
-    (next?'<div class="an-block"><div class="an-h an-next">➜ 下一步</div><ul class="an-ul">'+next+'</ul></div>':'') +
-    (a.mode?'<div class="an-mode">分析方式：'+(a.mode==='llm'?'模型生成':'规则启发式')+'</div>':'');
-}
-function runAnalysis(id){
-  document.getElementById('kgAnalyze').disabled = true;
-  renderKGAnalysis(null, true);
-  if(apiEnabled()){
-    apiPost('/api/kg/nodes/' + encodeURIComponent(id) + '/analysis?refresh=true')
-      .then(j => { renderKGAnalysis((unwrap(j).analysis) || null, false); })
-      .catch(e => { showToast('生成利弊分析失败：' + e.message, 'err'); renderKGAnalysis(null, false); })
-      .finally(() => { document.getElementById('kgAnalyze').disabled = false; });
-    return;
-  }
-  const a = mockAnalysis(KGNODES.find(x => String(x.id) === String(id)) || { term:'', category:'', times:0, weight:0 });
-  renderKGAnalysis(a, false);
-  document.getElementById('kgAnalyze').disabled = false;
-}
-async function deleteNode(id){
-  const n = KGNODES.find(x => String(x.id) === String(id));
-  const name = n ? (n.label || n.term) : id;
-  if(!confirm('确定删除「'+name+'」及其关联事件？此操作不可撤销。')) return;
-  if(apiEnabled()){
-    try{ await apiDelete('/api/kg/nodes/' + encodeURIComponent(id)); showToast('已删除「'+name+'」', 'ok'); }
-    catch(e){ showToast('删除失败：' + e.message, 'err'); return; }
-    await loadMap();
-  } else {
-    MOCK_MAP.nodes = MOCK_MAP.nodes.filter(x => String(x.id) !== String(id));
-    MOCK_MAP.edges = MOCK_MAP.edges.filter(e => e.source !== (n && n.term) && e.target !== (n && n.term));
-    const data = mockMap(); KGNODES = data.nodes; KG_TREE = data.tree; KG_CO = data.co;
-    buildKgFilter(); renderKG();
-    showToast('已删除「'+name+'」', 'ok');
-  }
-  closeKgDetail();
-}
-async function clearGraph(){
-  if(!confirm('确定清空整个长期知识图谱？所有关键词与事件将被删除，不可撤销。')) return;
-  if(apiEnabled()){
-    try{ await apiPost('/api/kg/clear'); showToast('已清空长期知识图谱', 'ok'); }
-    catch(e){ showToast('清空失败：' + e.message, 'err'); return; }
-    await loadMap();
-  } else {
-    MOCK_MAP.nodes = []; MOCK_MAP.edges = [];
-    KGNODES = []; KG_TREE = []; KG_CO = [];
-    buildKgFilter(); renderKG();
-    showToast('已清空长期知识图谱', 'ok');
-  }
-  closeKgDetail();
-}
-function closeKgDetail(){
-  KG_SEL = null;
-  document.getElementById('kgDetailCard').classList.add('hidden');
-  document.getElementById('kgOverview').classList.remove('hidden');
-}
+document.getElementById('memSave').onclick = () => {
+  const n = MEMORY.nodes.find(x => x.id === S.memSel); if(!n) return;
+  n.label = document.getElementById('memLabel').value || n.label;
+  n.type = document.getElementById('memType').value;
+  n.status = document.getElementById('memStatus').value;
+  renderMemory();
+};
+document.getElementById('memDel').onclick = () => {
+  MEMORY.nodes = MEMORY.nodes.filter(x => x.id !== S.memSel);
+  MEMORY.edges = MEMORY.edges.filter(pr => pr[0] !== S.memSel && pr[1] !== S.memSel);
+  S.memSel = null;
+  document.getElementById('memEditCard').style.display = 'none';
+  renderMemory();
+};
+document.getElementById('memFilter').onchange = e => { S.memFilter = e.target.value; renderMemory(); };
+document.getElementById('simTurnBtn').onclick = () => {
+  const id = 'm' + (MEMORY.nodes.length + 1) + '_' + Date.now();
+  MEMORY.nodes.push({ id:id, label:'新节点 一段新的对话记忆', type:'casual', status:'draft', imp:0.5 });
+  const phases = MEMORY.nodes.filter(x => x.type === 'phase');
+  const last = phases[phases.length - 1];
+  MEMORY.edges.push([last ? last.id : 'm1', id]);
+  renderMemory();
+};
 
 /* ============================ 缩放 / 平移 / 拖动节点 ============================ */
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
@@ -927,15 +701,16 @@ function scheduleRender(which){
   if(which==='E'){
     if(rafE) return; rafE = requestAnimationFrame(()=>{ rafE=null; if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } updateZoomLvl(); });
   } else {
-    if(rafM) return; rafM = requestAnimationFrame(()=>{ rafM=null; if(S.tab==='memory') paintKG(null,false); updateZoomLvl(); });
+    if(rafM) return; rafM = requestAnimationFrame(()=>{ rafM=null; if(S.tab==='memory') paintMemory(null,false); updateZoomLvl(); });
   }
 }
 function updateZoomLvl(){ const el=document.getElementById('zoomLvl'); if(el) el.textContent='缩放 '+Math.round((S.tab==='explore'?S.scaleE:S.scaleM)*100)+'%'; }
 function paintNow(which){
   if(which==='E'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); }
-  else paintKG(null,false);
+  else paintMemory(null,false);
   updateZoomLvl();
 }
+/* 平滑缩放动画（相册式手感） */
 function animateScale(targetScale, mx, my, which, dur, targetOff){
   const chart = which==='E'?chartE:chartM;
   const W=chart.getWidth(), H=chart.getHeight(), cx=W/2, cy=H/2;
@@ -956,6 +731,9 @@ function animateScale(targetScale, mx, my, which, dur, targetOff){
 function bindView(chart, which){
   const dom = chart.getDom();
   dom.style.cursor = 'grab';
+  // 整图平移 + 以光标为中心滚轮缩放 由 ECharts 原生 roam 完成；
+  // 这里仅自跟踪缩放值 S.scale*（每格 ×1.12），用来驱动「标签阈值 / 缩放%」显示。
+  // 注：graph series roam 后 getOption().series[0].zoom 不可靠（恒为 1），故不读回、改为自累积。
   let zt = null;
   dom.addEventListener('wheel', e => {
     const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
@@ -963,14 +741,18 @@ function bindView(chart, which){
     updateZoomLvl();
     if(zt) clearTimeout(zt);
     zt = setTimeout(() => {
+      // 缩放足够大时让小节点名字浮现（merge 重绘，保留 roam 平移/缩放状态）
       if(which==='E'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); }
-      else paintKG(null,false);
+      else paintMemory(null,false);
     }, 90);
   }, {passive:true});
 }
 bindView(chartE, 'E');
 bindView(chartM, 'M');
 
+/* 同步原生 roam 的真实缩放值到 S.scale*：getOption().zoom 在 roam 后恒为 1 不可靠，
+   但 roam 事件会携带当前真实 zoom；用它驱动标签阈值与缩放%，并使重绘 notMerge 写回的
+   zoom 与可视缩放一致，避免「原生灵敏度≠自累积 1.12」造成的跳变。 */
 function bindRoamSync(chart, which){
   chart.on('roam', params => {
     if(params && typeof params.zoom === 'number'){
@@ -996,10 +778,10 @@ function findNode(query){
          || built.nodes.find(n => n.id.toLowerCase().startsWith(q))
          || built.nodes.find(n => n.id.toLowerCase().indexOf(q) >= 0))?.id || null;
   } else {
-    const list = KGNODES;
-    return (list.find(n => (n.label||n.term).toLowerCase() === q)
-         || list.find(n => (n.label||n.term).toLowerCase().startsWith(q))
-         || list.find(n => (n.label||n.term).toLowerCase().indexOf(q) >= 0))?.id || null;
+    const list = MEMORY.nodes;
+    return (list.find(n => n.label.toLowerCase() === q)
+         || list.find(n => n.label.toLowerCase().startsWith(q))
+         || list.find(n => n.label.toLowerCase().indexOf(q) >= 0))?.id || null;
   }
 }
 function doSearch(){
@@ -1008,17 +790,17 @@ function doSearch(){
   const ub = document.getElementById('unlockBtn');
   if(!id){ document.getElementById('explainText').textContent = '未找到匹配「' + q + '」的节点，换个关键词试试。'; document.getElementById('relBox').classList.add('hidden'); return; }
   S.locked = id; recordSearch(q, id); ub.classList.remove('hidden');
-  if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } else paintKG(null,false);
+  if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } else paintMemory(null,false);
   renderLockCard(id);
 }
 function renderLockCard(id){
   const box = document.getElementById('explainText');
   const badge = document.getElementById('expBadge');
-  let cat = '通用衍生', imp = 1, name = id;
-  if(S.tab==='explore'){ const built = buildTree(S.center, [5,2,2], 3, 34); const n = built.nodes.find(x => x.id === id); if(n){ cat = n.cat; imp = n.imp; name = id; } }
-  else { const n = KGNODES.find(x => String(x.id) === id); if(n){ cat = n.category; imp = n.weight; name = n.label || n.term; } }
+  let cat = '通用衍生', imp = 1;
+  if(S.tab==='explore'){ const built = buildTree(S.center, [5,2,2], 3, 34); const n = built.nodes.find(x => x.id === id); if(n){ cat = n.cat; imp = n.imp; } }
+  else { const n = MEMORY.nodes.find(x => x.id === id); if(n){ cat = n.type; imp = n.imp != null ? n.imp : 0.6; } }
   box.innerHTML = '<span class="catpill" style="background:'+legendColor(cat)+'">'+cat+'</span> '
-                + '<b style="font-size:14px;">'+esc(name)+'</b> 已锁定'
+                + '<b style="font-size:14px;">'+id+'</b> 已锁定'
                 + '<div style="margin-top:8px;color:#4a5160;">重要程度：'+(Math.round(imp*100))+'%</div>'
                 + '<div class="hint" style="margin-top:6px;">已聚焦该节点并淡化其余元素；点击「解锁」恢复。</div>';
   badge.innerHTML = '<span class="badge b-lock">🔒 已锁定</span>';
@@ -1027,25 +809,20 @@ function unlock(){
   S.locked = null;
   document.getElementById('unlockBtn').classList.add('hidden');
   document.getElementById('expBadge').innerHTML = '';
-  if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } else paintKG(null,false);
+  if(S.tab==='explore'){ if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); } else paintMemory(null,false);
 }
 document.getElementById('searchBtn').onclick = doSearch;
 document.getElementById('search').addEventListener('keydown', e => { if(e.key==='Enter') doSearch(); });
 document.getElementById('unlockBtn').onclick = unlock;
 
-/* ============================ 图例（探索型） ============================ */
+/* ============================ 图例 ============================ */
 function renderLegend(){
   const lb = document.getElementById('legendBox'); lb.innerHTML = '';
   Object.keys(CATEGORIES).forEach(k => { const el = document.createElement('span'); el.className='lg'; el.innerHTML = '<i style="background:'+legendColor(k)+'"></i>'+k; lb.appendChild(el); });
-}
-
-/* ============================ 提示条 ============================ */
-function showToast(msg, type){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast ' + (type || 'info') + ' show';
-  clearTimeout(t._t);
-  t._t = setTimeout(() => { t.className = 'toast ' + (type || 'info'); }, 2600);
+  const mb = document.getElementById('memLegendBox'); mb.innerHTML = '';
+  [['phase','对话阶段'],['inspiration','灵感'],['casual','普通提问 / 咨询']].forEach(([k,label]) => {
+    const el = document.createElement('span'); el.className='lg'; el.innerHTML = '<i style="background:'+TYPE_COLOR[k]+'"></i>'+label+'（越深越重要）'; mb.appendChild(el);
+  });
 }
 
 /* ============================ 事件 ============================ */
@@ -1060,7 +837,7 @@ document.querySelectorAll('.tab').forEach(t => {
     if(!isE){ S.scaleM = 1; S.offM = {x:0,y:0}; }
     setTimeout(() => {
       if(isE){ chartE.resize(); if(S.mode==='timeline') paintTimeline(null,false); else paintExplore(null,false); }
-      else { chartM.resize(); renderKG(); }
+      else { chartM.resize(); paintMemory(null,false); }
     }, 30);
   };
 });
@@ -1069,16 +846,16 @@ document.querySelectorAll('#modeSeg button').forEach(b => {
     document.querySelectorAll('#modeSeg button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     S.mode = b.dataset.mode;
-    S.scaleE = 1; S.offE = {x:0,y:0};
+    S.scaleE = 1; S.offE = {x:0,y:0};           // 切换布局后默认看全图
     if(S.mode==='timeline') renderTimeline(); else renderExplore();
   };
 });
-document.querySelectorAll('#kgModeSeg button').forEach(b => {
+document.querySelectorAll('#memModeSeg button').forEach(b => {
   b.onclick = () => {
-    document.querySelectorAll('#kgModeSeg button').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('#memModeSeg button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
-    S.kgMode = b.dataset.mode;
-    paintKG(null, false);
+    S.memMode = b.dataset.mode;
+    renderMemory();
   };
 });
 document.getElementById('genBtn').onclick = () => {
@@ -1097,16 +874,13 @@ document.querySelectorAll('[data-len]').forEach(b => {
 });
 document.getElementById('backBtn').onclick = () => { if(S.idx > 0){ S.idx--; S.center = S.trail[S.idx]; renderExplore(); } };
 document.getElementById('fwdBtn').onclick = () => { if(S.idx < S.trail.length - 1){ S.idx++; S.center = S.trail[S.idx]; renderExplore(); } };
-document.getElementById('kgRefresh').onclick = () => { showToast('正在刷新…','info'); loadMap().then(() => showToast('已刷新','ok')); };
-document.getElementById('kgClear').onclick = clearGraph;
-document.getElementById('kgAnalyze').onclick = () => { if(KG_SEL) runAnalysis(KG_SEL); };
-document.getElementById('kgDelete').onclick = () => { if(KG_SEL) deleteNode(KG_SEL); };
-document.getElementById('kgFilter').onchange = e => { KG_FILTER = e.target.value; computeKG(); paintKG(null, false); };
 window.onresize = () => {
   if(S.tab==='explore'){ chartE.resize(); if(S.mode==='timeline'){ if(TL) paintTimeline(null,false); } else { if(EXP) paintExplore(null,false); } }
-  else { chartM.resize(); if(KG_OBJ) paintKG(null,false); }
+  else { chartM.resize(); if(MEMOBJ) paintMemory(null,false); }
 };
 
+/* 缩放按钮：更新自跟踪缩放值并触发重绘（paint 内 notMerge 会把 zoom 写回 series，
+   不传 center 由盒模型自动居中，避免上一轮「显式 center 与盒模型冲突导致图谱消失」） */
 function roamZoom(factor, which){
   const z = clamp(curScale(which)*factor, 0.4, 6);
   if(which==='E') S.scaleE=z; else S.scaleM=z;
@@ -1123,6 +897,7 @@ document.getElementById('zoomOut').onclick = () => roamZoom(1/1.25, S.tab==='exp
 document.getElementById('zoomReset').onclick = () => roamReset(S.tab==='explore'?'E':'M');
 document.getElementById('showAll').onchange = e => { S.showAll = e.target.checked; scheduleRender(S.tab==='explore'?'E':'M'); };
 
+/* 工具条收起 / 展开 */
 document.getElementById('fbCollapse').onclick = () => { document.getElementById('floatbar').classList.add('hidden'); document.getElementById('fbExpand').classList.remove('hidden'); };
 document.getElementById('fbExpand').onclick = () => { document.getElementById('floatbar').classList.remove('hidden'); document.getElementById('fbExpand').classList.add('hidden'); };
 
