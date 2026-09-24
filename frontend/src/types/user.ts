@@ -140,6 +140,7 @@ export interface AgentSettings {
   voice_rate: number // 0.5 - 2.0
   voice_pitch: number // 0.5 - 2.0
   custom_instructions: string // ≤ 2000
+  agent_address_name: string // 希望智能体如何称呼你（空则回退到 display_name）
 }
 
 // PUT 允许部分字段

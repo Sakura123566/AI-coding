@@ -36,7 +36,8 @@ const DEFAULT_SETTINGS: AgentSettings = {
   voice_name: 'xiaoyan',
   voice_rate: 1.0,
   voice_pitch: 1.0,
-  custom_instructions: ''
+  custom_instructions: '',
+  agent_address_name: ''
 }
 let mockSettings: AgentSettings = { ...DEFAULT_SETTINGS }
 

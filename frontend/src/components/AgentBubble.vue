@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useKpStore } from '@/stores/knowledgeParty'
+import { useAgentChatStore } from '@/stores/agentChat'
 import EmotionAvatar from '@/components/emotion/EmotionAvatar.vue'
 import { useSpeech } from '@/composables/useSpeech'
 import { useAgentSettings } from '@/composables/useAgentSettings'
@@ -39,6 +40,7 @@ onMounted(() => {
   hintTimer = setInterval(() => {
     hintIdx.value = (hintIdx.value + 1) % hints.length
   }, 4200)
+  chat.ensureSession()
 })
 onBeforeUnmount(() => {
   if (hintTimer) clearInterval(hintTimer)
@@ -122,27 +124,48 @@ function maybeAutoPlay(text: string) {
   if (s && s.voice_enabled && s.voice_auto_play) speakText(text)
 }
 
-// —— 对话（占位，后端后续接入真实智能体）——
-interface Msg {
-  role: 'user' | 'agent'
-  text: string
-}
-const messages = ref<Msg[]>([
-  { role: 'agent', text: '嗨，我是知识派对的研究智能体～有想深挖的方向随时叫我。' }
-])
+// —— 对话：多轮 + 历史（本地优先持久化，见 stores/agentChat）——
+const chat = useAgentChatStore()
 const input = ref('')
-function send() {
+const view = ref<'chat' | 'history'>('chat')
+const chatBody = ref<HTMLElement | null>(null)
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight
+  })
+}
+watch(() => chat.messages.length, scrollToBottom)
+watch(view, (v) => {
+  if (v === 'chat') scrollToBottom()
+})
+
+async function send() {
   const t = input.value.trim()
   if (!t) return
-  messages.value.push({ role: 'user', text: t })
   input.value = ''
-  // 后端接入前的占位回复：先记下用户问题，具体对话能力由后端实现
-  const reply: Msg = {
-    role: 'agent',
-    text: '（智能体对话能力将由后端接入，敬请期待～我先把你的问题记下了）'
-  }
-  messages.value.push(reply)
-  maybeAutoPlay(reply.text)
+  await chat.send(t)
+  const last = chat.messages[chat.messages.length - 1]
+  if (last && last.role === 'agent') maybeAutoPlay(last.text)
+}
+
+// 历史会话侧栏
+function openHistory() {
+  view.value = 'history'
+}
+function backToChat() {
+  view.value = 'chat'
+}
+function selectSession(id: string) {
+  chat.selectSession(id)
+  view.value = 'chat'
+}
+function newChat() {
+  chat.newSession()
+  view.value = 'chat'
+}
+function delSession(id: string) {
+  chat.deleteSession(id)
 }
 </script>
 
@@ -173,39 +196,95 @@ function send() {
   >
     <div class="agent-chat-head" @mousedown="onChatDown">
       <span class="agent-chat-title">🤖 研究智能体</span>
-      <button class="agent-chat-close" title="收起" @click="chatOpen = false">×</button>
-    </div>
-    <!-- 情绪头像：默认订阅 store 稳定会话，后端经 SSE 推送情绪状态 -->
-    <div class="agent-emotion">
-      <EmotionAvatar :session-id="emotionSessionId" :size="120" />
-    </div>
-    <div class="chat">
-      <div
-        v-for="(m, i) in messages"
-        :key="i"
-        class="chat-row"
-        :class="m.role"
-      >
-        <div class="chat-avatar">{{ m.role === 'agent' ? '🤖' : '🧑' }}</div>
-        <div class="chat-bubble">
-          <span class="cb-text">{{ m.text }}</span>
-          <button
-            v-if="m.role === 'agent'"
-            class="cb-speak"
-            title="朗读此条"
-            @click="speakText(m.text)"
-          >🔊</button>
-        </div>
+      <div class="agent-chat-actions">
+        <button
+          v-if="view === 'chat'"
+          class="agent-chat-btn"
+          title="历史会话"
+          @mousedown.stop
+          @click.stop="openHistory"
+        >🕘</button>
+        <button
+          v-else
+          class="agent-chat-btn"
+          title="返回对话"
+          @mousedown.stop
+          @click.stop="backToChat"
+        >←</button>
+        <button
+          class="agent-chat-close"
+          title="收起"
+          @mousedown.stop
+          @click.stop="chatOpen = false"
+        >×</button>
       </div>
     </div>
-    <div class="chat-input">
-      <el-input
-        v-model="input"
-        placeholder="和智能体说点什么…（对话能力后端接入中）"
-        @keydown.enter="send"
-      />
-      <el-button type="primary" @click="send">发送</el-button>
-    </div>
+
+    <!-- 对话视图 -->
+    <template v-if="view === 'chat'">
+      <!-- 情绪头像：默认订阅 store 稳定会话，后端经 SSE 推送情绪状态 -->
+      <div class="agent-emotion">
+        <EmotionAvatar :session-id="emotionSessionId" :size="120" />
+      </div>
+      <div class="chat" ref="chatBody">
+        <div
+          v-for="(m, i) in chat.messages"
+          :key="i"
+          class="chat-row"
+          :class="m.role"
+        >
+          <div class="chat-avatar">{{ m.role === 'agent' ? '🤖' : '🧑' }}</div>
+          <div class="chat-bubble">
+            <span class="cb-text">{{ m.text }}</span>
+            <button
+              v-if="m.role === 'agent'"
+              class="cb-speak"
+              title="朗读此条"
+              @click="speakText(m.text)"
+            >🔊</button>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input">
+        <el-input
+          v-model="input"
+          :placeholder="chat.loading ? '智能体思考中…' : '和智能体说点什么…'"
+          @keydown.enter="send"
+        />
+        <el-button type="primary" :loading="chat.loading" @click="send">发送</el-button>
+      </div>
+    </template>
+
+    <!-- 历史会话侧栏 -->
+    <template v-else>
+      <div class="chat-history">
+        <div class="history-head">
+          <span>历史会话</span>
+          <el-button size="small" type="primary" @click="newChat">＋ 新对话</el-button>
+        </div>
+        <div class="history-list">
+          <div v-if="chat.sessions.length === 0" class="history-empty">还没有对话记录</div>
+          <div
+            v-for="s in chat.sessions"
+            :key="s.id"
+            class="history-item"
+            @click="selectSession(s.id)"
+          >
+            <div class="history-item-main">
+              <div class="history-title">{{ s.title }}</div>
+              <div class="history-sub">
+                {{ s.messages.length }} 条 · {{ new Date(s.updatedAt).toLocaleDateString() }}
+              </div>
+            </div>
+            <button
+              class="history-del"
+              title="删除"
+              @click.stop="delSession(s.id)"
+            >🗑</button>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -303,6 +382,25 @@ function send() {
   font-size: 14px;
   font-weight: 600;
 }
+.agent-chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-chat-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.agent-chat-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
 .agent-chat-close {
   border: none;
   background: rgba(255, 255, 255, 0.2);
@@ -394,5 +492,78 @@ function send() {
   padding: 10px;
   border-top: 1px solid #eef0f2;
   flex: 0 0 auto;
+}
+/* 历史会话侧栏 */
+.chat-history {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3a4256;
+  border-bottom: 1px solid #eef0f2;
+}
+.history-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history-empty {
+  text-align: center;
+  color: #9aa3b2;
+  font-size: 12px;
+  padding: 24px 0;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: #f6f8fc;
+  border: 1px solid #eef0f2;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.history-item:hover {
+  background: #eef3ff;
+}
+.history-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.history-title {
+  font-size: 13px;
+  color: #1f2329;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-sub {
+  font-size: 11px;
+  color: #9aa3b2;
+  margin-top: 2px;
+}
+.history-del {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.5;
+  padding: 2px 4px;
+}
+.history-del:hover {
+  opacity: 1;
 }
 </style>

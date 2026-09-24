@@ -43,7 +43,8 @@ const form = reactive<AgentSettings>({
   voice_name: 'xiaoyan',
   voice_rate: 1.0,
   voice_pitch: 1.0,
-  custom_instructions: ''
+  custom_instructions: '',
+  agent_address_name: ''
 })
 
 const personalityOptions = (Object.keys(AGENT_PERSONALITY_LABELS) as AgentPersonality[]).map(
@@ -188,6 +189,18 @@ async function save() {
             />
           </el-form-item>
         </template>
+
+        <el-divider content-position="left">称呼与个性化</el-divider>
+
+        <el-form-item label="希望被如何称呼">
+          <el-input
+            v-model="form.agent_address_name"
+            maxlength="20"
+            show-word-limit
+            placeholder="例如：小明（留空则默认用你的昵称）"
+          />
+          <span class="as-hint">智能体会在对话里用这个称呼你；留空时回退到你的资料昵称。</span>
+        </el-form-item>
 
         <el-divider content-position="left">自定义指令</el-divider>
 

@@ -20,7 +20,20 @@ import {
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 // 默认 mock：让「等后端」阶段的 UI 骨架也能直接演示。
-const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true'
+export const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true'
+
+// 读取本地已持久化的登录身份（与 stores/user.ts 的 kp-user-v2 同 key）。
+// 用于 mock 模式下复用真实身份，避免刷新后被重生的访客覆盖名字等资料。
+function readPersistedUser(): User | null {
+  try {
+    const raw = localStorage.getItem('kp-user-v2')
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return (data?.user as User) ?? null
+  } catch {
+    return null
+  }
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
@@ -146,6 +159,12 @@ export async function login(input: LoginInput): Promise<AuthResult> {
 export async function getMe(token: string): Promise<User> {
   if (USE_MOCK) {
     await delay(300)
+    // 优先复用本地已持久化的身份，避免刷新后名字被重生的访客覆盖
+    const persisted = readPersistedUser()
+    if (persisted) {
+      mockUser = persisted
+      return persisted
+    }
     const u = mockUser ?? mockUserFrom({ username: 'guest', password: '' }, { display_name: '访客' })
     mockUser = u
     return u
@@ -159,7 +178,7 @@ export async function getMe(token: string): Promise<User> {
 export async function getPortrait(token: string): Promise<UserPortrait> {
   if (USE_MOCK) {
     await delay(300)
-    const u = mockUser ?? mockUserFrom({ username: 'guest', password: '' }, { display_name: '访客' })
+    const u = readPersistedUser() ?? mockUser ?? mockUserFrom({ username: 'guest', password: '' }, { display_name: '访客' })
     mockPortrait = mockPortrait ?? mockPortraitFor(u)
     return mockPortrait
   }
@@ -178,8 +197,17 @@ export async function getPortrait(token: string): Promise<UserPortrait> {
 export async function updateProfile(token: string, patch: ProfileUpdate): Promise<User> {
   if (USE_MOCK) {
     await delay(300)
-    const u = mockUser ?? mockUserFrom({ username: 'guest', password: '' })
-    mockUser = { ...u, ...patch }
+    const base = readPersistedUser() ?? mockUser ?? mockUserFrom({ username: 'guest', password: '' })
+    mockUser = { ...base, ...patch }
+    // 同步写回本地持久化，确保刷新后保留名字等资料
+    try {
+      const raw = localStorage.getItem('kp-user-v2')
+      const data = raw ? JSON.parse(raw) : {}
+      data.user = mockUser
+      localStorage.setItem('kp-user-v2', JSON.stringify(data))
+    } catch {
+      /* ignore */
+    }
     return mockUser
   }
   const res = await fetch(`${API_BASE}/api/auth/me`, {

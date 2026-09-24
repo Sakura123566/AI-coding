@@ -8,7 +8,8 @@ import {
   logout as apiLogout,
   getMe as apiGetMe,
   getPortrait as apiGetPortrait,
-  updateProfile as apiUpdateProfile
+  updateProfile as apiUpdateProfile,
+  USE_MOCK
 } from '../services/user'
 import type { LoginInput, ProfileUpdate, RegisterInput, User, UserPortrait } from '../types/user'
 
@@ -124,7 +125,11 @@ export const useUserStore = defineStore('user', () => {
 
   // 应用启动时若已有 token，异步刷新用户 + 画像
   function init() {
-    if (token.value) fetchProfile()
+    if (!token.value) return
+    // mock 模式下本地已持久化的身份是真相源；跳过 fetchProfile，
+    // 否则 getMe 会用重生的访客覆盖掉本地保存的名字等资料（修复「名字每次重开就消失」）。
+    if (USE_MOCK && saved?.user) return
+    fetchProfile()
   }
 
   watch(
