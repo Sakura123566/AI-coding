@@ -193,6 +193,7 @@ function onNav(item: { key: KpMode; label: string; icon: any }) {
   }
 }
 function onSelect(t: string) {
+  store.setMode('search') // 点历史记录自动切回搜索界面，无需手动切换
   topic.value = t
   rotatePhrase()
   submit()

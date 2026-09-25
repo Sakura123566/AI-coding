@@ -42,6 +42,47 @@ function closeChat() {
   chatOpen.value = false
 }
 
+// —— 启动按钮（圆形头像）可拖动：mousedown 起，mouseup 未移动则视为点击打开 ——
+const launcherPos = ref({ x: 0, y: 0 })
+function initLauncherPos() {
+  launcherPos.value = {
+    x: Math.max(8, window.innerWidth - 70),
+    y: Math.max(8, window.innerHeight - 70)
+  }
+}
+onMounted(() => {
+  initLauncherPos()
+})
+let lstart = { x: 0, y: 0, px: 0, py: 0, moved: false }
+function onLauncherDown(e: MouseEvent) {
+  lstart = {
+    x: e.clientX,
+    y: e.clientY,
+    px: launcherPos.value.x,
+    py: launcherPos.value.y,
+    moved: false
+  }
+  window.addEventListener('mousemove', onLauncherMove)
+  window.addEventListener('mouseup', onLauncherUp)
+  document.body.style.userSelect = 'none'
+}
+function onLauncherMove(e: MouseEvent) {
+  const dx = e.clientX - lstart.x
+  const dy = e.clientY - lstart.y
+  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) lstart.moved = true
+  launcherPos.value = {
+    x: Math.max(8, Math.min(window.innerWidth - 60, lstart.px + dx)),
+    y: Math.max(8, Math.min(window.innerHeight - 60, lstart.py + dy))
+  }
+}
+function onLauncherUp() {
+  window.removeEventListener('mousemove', onLauncherMove)
+  window.removeEventListener('mouseup', onLauncherUp)
+  document.body.style.userSelect = ''
+  // 仅当没有拖动时才打开对话（拖动后不触发点击）
+  if (!lstart.moved) openChat()
+}
+
 // —— 小对话窗拖拽（按标题栏拖动）——
 let cstart = { x: 0, y: 0, px: 0, py: 0 }
 function onChatDown(e: MouseEvent) {
@@ -127,14 +168,15 @@ function delSession(id: string) {
 </script>
 
 <template>
-  <!-- 紧凑启动按钮：右下角，不挡视线；图标用情绪头像待机图，保留轻晃小动画 -->
+  <!-- 紧凑启动按钮：可拖动；图标用情绪头像待机图，保留轻晃小动画 -->
   <button
     v-if="!chatOpen"
     class="agent-launcher"
-    title="打开研究智能体"
-    @click="openChat"
+    title="打开研究智能体（可拖动）"
+    :style="{ left: launcherPos.x + 'px', top: launcherPos.y + 'px' }"
+    @mousedown="onLauncherDown"
   >
-    <img class="agent-launcher-img" :src="launcherIcon" alt="研究智能体" />
+    <img class="agent-launcher-img" :src="launcherIcon" alt="研究智能体" draggable="false" @dragstart.prevent />
   </button>
 
   <!-- 小对话窗：非模态浮层，可拖拽；对话时标题头像带小动画 -->
@@ -245,8 +287,10 @@ function delSession(id: string) {
 /* 启动按钮：用情绪头像裁成圆形作为按钮本身，不再露出紫色背景 */
 .agent-launcher {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  left: 0;
+  top: 0;
+  right: auto;
+  bottom: auto;
   z-index: 55;
   width: 52px;
   height: 52px;
@@ -254,18 +298,18 @@ function delSession(id: string) {
   border-radius: 50%;
   background: #ffffff;
   box-shadow: 0 8px 22px rgba(20, 30, 60, 0.18);
-  cursor: pointer;
+  cursor: grab;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 .agent-launcher:hover {
-  transform: scale(1.06);
   box-shadow: 0 10px 28px rgba(20, 30, 60, 0.26);
 }
 .agent-launcher:active {
+  cursor: grabbing;
   transform: scale(0.96);
 }
 .agent-launcher-img {
@@ -392,6 +436,9 @@ function delSession(id: string) {
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .agent-chat-btn:hover {
   background: rgba(255, 255, 255, 0.35);
@@ -406,6 +453,9 @@ function delSession(id: string) {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .agent-chat-close:hover {
   background: rgba(255, 255, 255, 0.35);

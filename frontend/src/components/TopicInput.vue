@@ -23,8 +23,9 @@ function onSearch() {
       placeholder="想请哪些知识点来这场派对？例如：大语言模型在代码生成中的评测方法"
       :disabled="loading"
       @update:model-value="emit('update:modelValue', $event)"
-      @keydown.ctrl.enter="onSearch"
-      @keydown.meta.enter="onSearch"
+      @keydown.enter.exact.prevent="onSearch"
+      @keydown.ctrl.enter.prevent="onSearch"
+      @keydown.meta.enter.prevent="onSearch"
     />
     <div class="actions">
       <el-button
@@ -35,7 +36,7 @@ function onSearch() {
       >
         生成报告
       </el-button>
-      <span class="hint">Ctrl / ⌘ + Enter 直接发请柬，叫知识点来派对</span>
+      <span class="hint">Enter 直接发请柬，Shift + Enter 换行</span>
     </div>
   </div>
 </template>
