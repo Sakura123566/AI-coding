@@ -47,6 +47,27 @@ function cancelAllFav() {
   ElMessage.success('已取消全部收藏')
 }
 
+// 在弹窗里直接新建收藏夹，并把当前论文收进去
+async function createSpaceAndAdd() {
+  try {
+    const { value } = await ElMessageBox.prompt('输入新收藏夹名称', '新建收藏夹', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '名称不能为空',
+      confirmButtonText: '创建',
+      cancelButtonText: '取消'
+    })
+    const name = value?.trim()
+    const p = favTarget.value
+    if (!name || !p) return
+    store.addSpace(name)
+    const newId = store.currentSpaceId
+    store.addToSpace(newId, p)
+    ElMessage.success(`已创建「${name}」并收藏本文献`)
+  } catch {
+    /* 取消 */
+  }
+}
+
 async function addTagFor(p: Paper) {
   try {
     const { value } = await ElMessageBox.prompt('输入标签名（回车添加）', '给收藏打标签', {
@@ -153,6 +174,12 @@ async function addTagFor(p: Paper) {
   >
     <div v-if="favTarget" class="fav-space-list">
       <div class="fav-space-target" :title="favTarget.title">{{ favTarget.title }}</div>
+      <el-button
+        class="fav-space-create"
+        size="small"
+        plain
+        @click="createSpaceAndAdd"
+      >＋ 新建收藏夹</el-button>
       <div
         v-for="s in store.spaces"
         :key="s.id"
@@ -322,6 +349,13 @@ async function addTagFor(p: Paper) {
   margin-bottom: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid #eef0f2;
+}
+.fav-space-create {
+  justify-content: flex-start;
+  padding-left: 6px;
+  margin-bottom: 4px;
+  width: auto;
+  font-size: 12.5px;
 }
 .fav-space-row {
   display: flex;

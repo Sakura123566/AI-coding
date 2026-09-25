@@ -242,7 +242,7 @@ function delSession(id: string) {
 </template>
 
 <style scoped>
-/* 启动按钮：复用对话页头像的"小动画"（🤖 轻晃）作为智能体入口，去掉原先的纯渐变圆钮 */
+/* 启动按钮：用情绪头像裁成圆形作为按钮本身，不再露出紫色背景 */
 .agent-launcher {
   position: fixed;
   right: 18px;
@@ -252,26 +252,28 @@ function delSession(id: string) {
   height: 52px;
   border: none;
   border-radius: 50%;
-  background: linear-gradient(160deg, #6a5cff 0%, #2b6cff 100%);
-  box-shadow: 0 8px 22px rgba(43, 108, 255, 0.35);
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(20, 30, 60, 0.18);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
 .agent-launcher:hover {
   transform: scale(1.06);
-  box-shadow: 0 10px 28px rgba(43, 108, 255, 0.5);
+  box-shadow: 0 10px 28px rgba(20, 30, 60, 0.26);
 }
 .agent-launcher:active {
   transform: scale(0.96);
 }
 .agent-launcher-img {
-  width: 30px;
-  height: 30px;
+  width: 100%;
+  height: 100%;
   display: inline-block;
-  object-fit: contain;
+  border-radius: 50%;
+  object-fit: cover;
   animation: agent-bob 2.6s ease-in-out infinite;
 }
 
