@@ -1,6 +1,7 @@
+import { apiBase, isDemoMode } from '../config/runtime'
 // 用户鉴权 + 资料服务层（前后端契约）。
-// 默认走 mock（VITE_USE_MOCK 未显式置 'false' 即为 mock），用于先把 UI 跑通；
-// 后端接入后把 VITE_USE_MOCK 置 'false' 即可切换，无需改 UI 代码。
+// 默认使用 demo 数据（VITE_APP_MODE=demo），用于先把 UI 跑通；
+// 后端接入后把 VITE_APP_MODE 设为 backend 即可切换，无需改 UI 代码。
 //
 // 约定端点：
 //   POST /api/auth/register  { username, password, display_name? } -> AuthResult
@@ -18,9 +19,9 @@ import {
   type UserPortrait
 } from '../types/user'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const API_BASE = apiBase
 // 默认 mock：让「等后端」阶段的 UI 骨架也能直接演示。
-export const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true'
+export const USE_MOCK = isDemoMode
 
 // 读取本地已持久化的登录身份（与 stores/user.ts 的 kp-user-v2 同 key）。
 // 用于 mock 模式下复用真实身份，避免刷新后被重生的访客覆盖名字等资料。

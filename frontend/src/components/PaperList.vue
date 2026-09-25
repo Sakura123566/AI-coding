@@ -59,6 +59,7 @@ function onStar(p: Paper) {
     // 默认按当前主题归入收藏夹：不存在则自动创建（不切换当前收藏夹）
     const sid = store.ensureSpaceByName(topic)
     store.addToSpace(sid, p)
+    store.setFavoriteDestination(sid)
     ElMessage.success(`已收藏到「${topic}」`)
   } else {
     // 开关关闭或主题为空：退回手动选择收藏夹

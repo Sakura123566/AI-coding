@@ -1,7 +1,8 @@
+import { apiBase, isDemoMode } from '../config/runtime'
 // 智能体对话服务层（多轮对话 + 会话上下文）。
-// 默认走 mock（VITE_USE_MOCK 未显式置 'false' 即为 mock），
+// 默认使用 demo 数据（VITE_APP_MODE=demo），
 // 用规则式回复演示「多轮上下文 + 长期记忆（知道你是谁、记得上一轮）」；
-// 后端就绪后切 VITE_USE_MOCK=false，自动对接真实会话接口（契约见下）。
+// 后端就绪后把 VITE_APP_MODE 设为 backend，即可对接真实会话接口（契约见下）。
 //
 // 约定端点（真实后端，backend/routers/chat_api.py，前缀 /api/chat，需 Bearer 登录）：
 //   POST /api/chat/sessions            (Bearer, {title?}) -> ok(session={id,title,...})
@@ -16,8 +17,8 @@
 
 import type { AgentSettings } from '../types/user'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true'
+const API_BASE = apiBase
+const USE_MOCK = isDemoMode
 
 export interface ChatMessage {
   role: 'user' | 'agent'
@@ -63,6 +64,45 @@ async function parseJson(res: Response): Promise<any> {
 
 const authHeaders = (token: string) => ({ Authorization: `Bearer ${token}` })
 
+const RESEARCH_INTENT_RE = /(论文|文献|检索|找几篇|找一些|最新进展|研究现状|survey|paper|papers|arxiv)/i
+
+function isResearchRequest(text: string): boolean {
+  return RESEARCH_INTENT_RE.test(text || '')
+}
+
+function extractResearchTopic(text: string): string {
+  const cleaned = String(text || '')
+    .replace(/帮我|请|麻烦|能不能|可以|给我|一下|看看|找一些|找几篇|找找|找|查查|搜搜|搜索|检索|相关|论文|文献|最新进展|研究现状|survey|papers?|arxiv/gi, ' ')
+    .replace(/[，。！？?!,.;；:：]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned || String(text || '').trim()
+}
+
+async function mockResearchResult(ctx: SendContext): Promise<ChatResult> {
+  const topic = extractResearchTopic(ctx.content)
+  const { mockResearchForTopic } = await import('../mocks/research.mock')
+  const result = mockResearchForTopic(topic, 5)
+  if (!result.papers.length) {
+    return {
+      reply: `当前演示数据中没有找到与「${topic}」匹配的论文。可以试试 GNN、图神经网络、知识图谱、RAG 或推荐系统。`,
+      intent: 'research',
+      mode: 'demo',
+      backendSessionId: ctx.backendSessionId
+    }
+  }
+  const lines = result.papers.map((paper) => {
+    const year = paper.year ? `${paper.year} 年` : '年份未知'
+    return `[${paper.id}] ${paper.title}（${year}）`
+  })
+  return {
+    reply: `当前为演示检索结果，围绕「${topic}」找到 ${result.papers.length} 篇论文：\n\n${lines.join('\n')}\n\n这些题目来自内置样例，未访问真实论文源。`,
+    intent: 'research',
+    papers: result.papers,
+    mode: 'demo',
+    backendSessionId: ctx.backendSessionId
+  }
+}
 // —— mock 规则式回复：体现多轮上下文 + 身份联动 + 性格/语气 ——
 function mockReply(ctx: SendContext): string {
   const name = ctx.addressName || ctx.userName || '朋友'
@@ -142,7 +182,8 @@ async function sendChatMessage(token: string, sessionId: string, content: string
 export async function sendAgentMessage(ctx: SendContext): Promise<ChatResult> {
   if (USE_MOCK) {
     await delay(700)
-    return { reply: mockReply(ctx), backendSessionId: ctx.backendSessionId }
+    if (isResearchRequest(ctx.content)) return await mockResearchResult(ctx)
+    return { reply: mockReply(ctx), mode: 'demo', backendSessionId: ctx.backendSessionId }
   }
   if (!ctx.token) {
     throw new Error('请先登录后再与智能体对话（真实后端需要账号）')
