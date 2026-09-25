@@ -1,3 +1,4 @@
+import { apiBase, isDemoMode } from '../config/runtime'
 // 知识图谱（探索型 / 记忆型）前后端契约与数据层。
 // 前端只调用约定的 REST 端点，不接触模型密钥 / MCP（由后端完成）。
 //
@@ -13,8 +14,8 @@
 //     POST   /api/memory/:id/lock { locked }       -> 锁定 / 解锁
 //     POST   /api/memory/simulate -> 模拟一轮对话，返回新增 MemoryNode[]
 //
-// 后端未就绪期间默认走 mock（VITE_USE_MOCK 未显式置为 'false' 即为 mock），
-// 用于先把 UI 骨架与交互跑通；后端接入后把 VITE_USE_MOCK 置 'false' 即可切换。
+// 后端未就绪期间默认使用 demo 数据（VITE_APP_MODE=demo），
+// 用于先把 UI 骨架与交互跑通；后端接入后把 VITE_APP_MODE 设为 backend 即可切换。
 
 export type GraphNodeType = 'concept' | 'paper' | 'method' | 'dataset' | 'application'
 export type GraphLayout = 'web' | 'radial' | 'timeline'
@@ -54,9 +55,9 @@ export interface GenerateGraphOptions {
   limit?: number
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const API_BASE = apiBase
 // 默认 mock：让「等后端」阶段的 UI 骨架也能直接演示。
-const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true'
+const USE_MOCK = isDemoMode
 
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))

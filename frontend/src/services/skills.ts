@@ -1,4 +1,5 @@
-// 用户自定义 Skill 服务层（前后端契约）。默认走 mock（VITE_USE_MOCK 未显式置 'false' 即为 mock）。
+import { apiBase, isDemoMode } from '../config/runtime'
+// 用户自定义 Skill 服务层（前后端契约）。默认使用 demo 数据（VITE_APP_MODE=demo）。
 //
 // 约定端点（backend/routers/agent_api.py，前缀 /api/agent）：
 //   GET    /skills            (Bearer) -> { skills: Skill[], count }
@@ -8,8 +9,8 @@
 //
 // 注意：后端 SkillBody 中 instruction 为必填（技能的执行指令/行为描述）。
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true'
+const API_BASE = apiBase
+const USE_MOCK = isDemoMode
 
 export interface Skill {
   id: number

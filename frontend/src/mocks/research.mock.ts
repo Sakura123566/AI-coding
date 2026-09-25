@@ -1,4 +1,5 @@
 import type { Paper, ResearchReport, ResearchResponse } from '../services/research'
+import { findBestTopicMatch } from '../utils/topicMatcher.ts'
 
 // 示例数据：用于前端先在无后端情况下跑通 UI。
 // 按真实契约结构返回：papers 带 id/source/url；report 含
@@ -69,6 +70,16 @@ const KG_PAPERS: Paper[] = [
   { id: 'KG-8', title: 'KG-BERT: BERT for Knowledge Graph Completion', authors: ['Liang Yao', 'Chengsheng Mao', 'Yuan Luo'], year: 2019, source: 'ACL Workshop', url: 'https://arxiv.org/abs/1909.03193', abstract: '将三元组拼成句子送入 BERT 做链接预测，把预训练语言模型引入图谱补全。' }
 ]
 
+const GNN_PAPERS: Paper[] = [
+  { id: 'GNN-1', title: 'Semi-Supervised Classification with Graph Convolutional Networks (GCN)', authors: ['Thomas N. Kipf', 'Max Welling'], year: 2017, source: 'ICLR', url: 'https://arxiv.org/abs/1609.02907', abstract: '提出图卷积网络的高效一阶近似，成为图神经网络最经典、最常用的基线之一。' },
+  { id: 'GNN-2', title: 'Inductive Representation Learning on Large Graphs (GraphSAGE)', authors: ['William L. Hamilton', 'Rex Ying', 'Jure Leskovec'], year: 2017, source: 'NeurIPS', url: 'https://arxiv.org/abs/1706.02216', abstract: '通过邻居采样与聚合实现归纳式节点表示学习，可直接泛化到训练时未见过的节点。' },
+  { id: 'GNN-3', title: 'Graph Attention Networks (GAT)', authors: ['Petar Veličković', 'Guillem Cucurull', 'Arantxa Casanova', 'et al.'], year: 2018, source: 'ICLR', url: 'https://arxiv.org/abs/1710.10903', abstract: '用注意力机制为不同邻居分配权重，无需预先固定图卷积的归一化系数。' },
+  { id: 'GNN-4', title: 'How Powerful are Graph Neural Networks? (GIN)', authors: ['Keyulu Xu', 'Weihua Hu', 'Jure Leskovec', 'Stefanie Jegelka'], year: 2019, source: 'ICLR', url: 'https://arxiv.org/abs/1810.00826', abstract: '从 WL 图同构测试角度分析 GNN 表达能力，并提出表达力更强的 GIN 结构。' },
+  { id: 'GNN-5', title: 'A Comprehensive Survey on Graph Neural Networks', authors: ['Zonghan Wu', 'Shirui Pan', 'Fengwen Chen', 'et al.'], year: 2021, source: 'IEEE TNNLS', url: 'https://arxiv.org/abs/1901.00596', abstract: '系统梳理图神经网络的设计范式、模型变体、应用场景与开放问题。' },
+  { id: 'GNN-6', title: 'Neural Message Passing for Quantum Chemistry', authors: ['Justin Gilmer', 'Samuel S. Schoenholz', 'Patrick F. Riley', 'et al.'], year: 2017, source: 'ICML', url: 'https://arxiv.org/abs/1704.01212', abstract: '把多种图神经网络统一为消息传递框架，并在分子性质预测任务上取得突破。' },
+  { id: 'GNN-7', title: 'Graph Convolutional Neural Networks for Web-Scale Recommender Systems (PinSAGE)', authors: ['Rex Ying', 'Ruining He', 'Kaifeng Chen', 'et al.'], year: 2018, source: 'KDD', url: 'https://arxiv.org/abs/1806.01973', abstract: '将图卷积扩展到十亿级工业推荐场景，结合随机游走与邻居采样生成物品嵌入。' },
+  { id: 'GNN-8', title: 'Do Transformers Really Perform Bad for Graph Representation? (Graphormer)', authors: ['Chengxuan Ying', 'Tianle Cai', 'Shengjie Luo', 'et al.'], year: 2021, source: 'NeurIPS', url: 'https://arxiv.org/abs/2106.05234', abstract: '将 Transformer 适配图结构，通过结构编码建模节点、边和全局图信息。' }
+]
 const REC_PAPERS: Paper[] = [
   { id: 'REC-1', title: 'Wide & Deep Learning for Recommender Systems', authors: ['Heng-Tze Cheng', 'Levent Koc', 'Jeremiah Harmsen', 'et al.'], year: 2016, source: 'DLRS', url: 'https://arxiv.org/abs/1606.02380', abstract: '记忆与泛化兼顾：宽层记历史，深层做泛化，是工业推荐系统的经典结构。' },
   { id: 'REC-2', title: 'DeepFM: A Factorization-Machine based Neural Network', authors: ['Huifeng Guo', 'Ruiming Tang', 'Yunming Ye', 'et al.'], year: 2017, source: 'IJCAI', url: 'https://arxiv.org/abs/1703.05170', abstract: '用 FM 与 DNN 共享特征嵌入，端到端建模低阶与高阶特征交叉。' },
@@ -91,12 +102,17 @@ const RL_PAPERS: Paper[] = [
 
 const CATALOG: CatalogItem[] = [
   {
+    keywords: ['gnn', 'gcn', 'graph neural', 'graph neural network', 'graph neural networks', '图神经网络', '图卷积网络', '图卷积神经网络'],
+    label: '图神经网络',
+    papers: GNN_PAPERS
+  },
+  {
     keywords: ['大语言模型', 'llm', '大模型', 'language model', 'gpt', 'transformer', '预训练', 'pretrain', 'chatgpt', '注意力', 'attention', 'rag', '检索增强', 'agent', '指令微调', 'rlhf', 'lora'],
     label: '大语言模型',
     papers: LLM_PAPERS
   },
   {
-    keywords: ['知识图谱', 'knowledge graph', '图谱', '知识表示', 'knowledge', '实体', '关系抽取', '知识融合', 'embedding', '表示学习', 'graph neural'],
+    keywords: ['知识图谱', 'knowledge graph', '图谱', '知识表示', 'knowledge', '实体', '关系抽取', '知识融合', 'embedding', '表示学习'],
     label: '知识图谱',
     papers: KG_PAPERS
   },
@@ -114,21 +130,19 @@ const CATALOG: CatalogItem[] = [
 
 // 命中任一关键词即返回该主题的论文(按 limit 截断)与报告；都没有命中 → 返回空（触发「没找到」趣味空态）。
 export function mockResearchForTopic(keyword: string, limit = 10): ResearchResponse {
-  const t = (keyword ?? '').toLowerCase()
-  for (const cat of CATALOG) {
-    if (cat.keywords.some((k) => t.includes(k.toLowerCase()))) {
-      const papers = cat.papers.slice(0, limit)
-      return {
-        status: 'success',
-        keyword,
-        resolvedKeyword: null,
-        count: papers.length,
-        papers,
-        report: buildReport(papers, cat.label),
-        reportError: null,
-        warnings: [],
-        message: null
-      }
+  const match = findBestTopicMatch(keyword, CATALOG)
+  if (match) {
+    const papers = match.item.papers.slice(0, limit)
+    return {
+      status: 'success',
+      keyword,
+      resolvedKeyword: null,
+      count: papers.length,
+      papers,
+      report: buildReport(papers, match.item.label),
+      reportError: null,
+      warnings: ['当前为本地样例演示数据，未访问真实论文源。'],
+      message: null
     }
   }
   return {
@@ -139,7 +153,7 @@ export function mockResearchForTopic(keyword: string, limit = 10): ResearchRespo
     papers: [],
     report: null,
     reportError: null,
-    warnings: [],
+    warnings: ['当前为本地样例演示数据，未找到匹配主题。'],
     message: null
   }
 }

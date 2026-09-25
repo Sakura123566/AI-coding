@@ -21,6 +21,7 @@
   .tab{padding:7px 17px;border-radius:9px;font-size:14px;cursor:pointer;color:var(--sub);transition:.15s;}
   .tab.on{background:#fff;color:var(--brand);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.07);}
   .divider{width:1px;height:26px;background:var(--line);}
+  .demo-kg-note{font-size:12px;color:#8a5a00;background:#fff7df;border:1px solid #f0d18a;border-radius:999px;padding:5px 10px;}
   .sub{font-size:13px;color:var(--sub);display:flex;align-items:center;gap:9px;}
   input[type=text]{padding:7px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;width:148px;outline:none;}
   input[type=text]:focus{border-color:var(--brand);}
@@ -127,6 +128,7 @@
 
 <header>
   <div class="row">
+    <div class="demo-kg-note">演示模式：图谱为内置样例，不代表真实个人数据。</div>
     <div class="tabs">
       <div class="tab on" data-tab="explore">探索型</div>
       <div class="tab" data-tab="memory">长期图谱</div>
@@ -152,6 +154,7 @@
     </div>
 
     <div id="barMemory" class="sub hidden">
+      <button id="kgReset" class="ghost">恢复演示数据</button>
       <button id="kgRefresh" class="ghost">刷新图谱</button>
       <button id="kgClear" class="danger">清空图谱</button>
       <span class="lbl">分类</span>
@@ -225,8 +228,8 @@
 
   <aside id="sideMemory" class="hidden">
     <div class="card" id="kgOverview">
-      <h3>长期知识图谱 <span id="kgCount" class="badge b-hit"></span></h3>
-      <div class="hint" id="kgHint">这是你长期研究中沉淀的关键词网络。点击任意主题节点，可查看详情、生成利弊分析、或删除分支。</div>
+      <h3>演示知识图谱 <span id="kgCount" class="badge b-hit"></span></h3>
+      <div class="hint" id="kgHint">这是演示用的长期知识图谱。点击任意主题节点，可查看详情、生成利弊分析、或删除分支；所有修改只保存在当前浏览器。</div>
       <div class="card" style="margin-top:10px;">
         <h3>分类图例</h3>
         <div class="legend" id="kgLegendBox" style="flex-direction:column;gap:7px;"></div>
@@ -338,6 +341,26 @@ const CATEGORIES = {
   '模型架构':{h:218}, '学习算法':{h:276}, '数学基础':{h:162},
   '特征工程':{h:34}, '评估应用':{h:350}, '通用衍生':{h:205},
 };
+
+const MOCK_MAP_DEFAULT = JSON.parse(JSON.stringify(MOCK_MAP));
+const MOCK_MAP_KEY = 'kp-demo-kg-v1';
+try {
+  const saved = JSON.parse(localStorage.getItem(MOCK_MAP_KEY) || 'null');
+  if (saved && Array.isArray(saved.nodes) && Array.isArray(saved.edges)) {
+    MOCK_MAP.nodes = saved.nodes;
+    MOCK_MAP.edges = saved.edges;
+  }
+} catch(e) {}
+function saveMockMap() {
+  try { localStorage.setItem(MOCK_MAP_KEY, JSON.stringify({ nodes: MOCK_MAP.nodes, edges: MOCK_MAP.edges })); } catch(e) {}
+}
+function resetMockMap() {
+  MOCK_MAP.nodes = JSON.parse(JSON.stringify(MOCK_MAP_DEFAULT.nodes));
+  MOCK_MAP.edges = JSON.parse(JSON.stringify(MOCK_MAP_DEFAULT.edges));
+  saveMockMap();
+  const data = mockMap(); KGNODES = data.nodes; KG_TREE = data.tree; KG_CO = data.co;
+  buildKgFilter(); renderKG(); closeKgDetail(); showToast('已恢复演示数据', 'ok');
+}
 function inferCategory(name){
   const m = {
     '模型架构':['神经网络','深度学习','CNN','RNN','Transformer','感知机','图','GCN','GraphSAGE','GAT','卷积','注意力','网络'],
@@ -889,6 +912,7 @@ async function deleteNode(id){
   } else {
     MOCK_MAP.nodes = MOCK_MAP.nodes.filter(x => String(x.id) !== String(id));
     MOCK_MAP.edges = MOCK_MAP.edges.filter(e => e.source !== (n && n.term) && e.target !== (n && n.term));
+    saveMockMap();
     const data = mockMap(); KGNODES = data.nodes; KG_TREE = data.tree; KG_CO = data.co;
     buildKgFilter(); renderKG();
     showToast('已删除「'+name+'」', 'ok');
@@ -903,6 +927,7 @@ async function clearGraph(){
     await loadMap();
   } else {
     MOCK_MAP.nodes = []; MOCK_MAP.edges = [];
+    saveMockMap();
     KGNODES = []; KG_TREE = []; KG_CO = [];
     buildKgFilter(); renderKG();
     showToast('已清空长期知识图谱', 'ok');
@@ -1099,6 +1124,8 @@ document.querySelectorAll('[data-len]').forEach(b => {
 });
 document.getElementById('backBtn').onclick = () => { if(S.idx > 0){ S.idx--; S.center = S.trail[S.idx]; renderExplore(); } };
 document.getElementById('fwdBtn').onclick = () => { if(S.idx < S.trail.length - 1){ S.idx++; S.center = S.trail[S.idx]; renderExplore(); } };
+document.getElementById('kgReset').onclick = resetMockMap;
+if(apiEnabled()) document.getElementById('kgReset').classList.add('hidden');
 document.getElementById('kgRefresh').onclick = () => { showToast('正在刷新…','info'); loadMap().then(() => showToast('已刷新','ok')); };
 document.getElementById('kgClear').onclick = clearGraph;
 document.getElementById('kgAnalyze').onclick = () => { if(KG_SEL) runAnalysis(KG_SEL); };

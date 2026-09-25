@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useKpStore } from '../stores/knowledgeParty'
 import PaperList from './PaperList.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const store = useKpStore()
 const activeTag = ref<string | null>(null)
+
+onMounted(() => {
+  const target = store.consumeFavoriteDestination()
+  if (target) store.switchSpace(target)
+})
 
 // 当前收藏夹内出现的标签（筛选条只展示与当前收藏相关的标签）
 const visibleTags = computed(() => {

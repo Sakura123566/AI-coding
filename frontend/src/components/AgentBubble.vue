@@ -512,6 +512,7 @@ function delSession(id: string) {
 }
 .cb-text {
   flex: 1 1 auto;
+  white-space: pre-wrap;
 }
 .cb-speak {
   flex: 0 0 auto;

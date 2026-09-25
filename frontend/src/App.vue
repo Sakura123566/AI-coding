@@ -17,6 +17,7 @@ import {
   SwitchButton,
   MagicStick
 } from '@element-plus/icons-vue'
+import DemoModeBanner from './components/DemoModeBanner.vue'
 import TopicInput from './components/TopicInput.vue'
 import PaperList from './components/PaperList.vue'
 import ResearchReport from './components/ResearchReport.vue'
@@ -245,6 +246,7 @@ async function createSpace() {
 </script>
 
 <template>
+  <DemoModeBanner />
   <div class="layout" :class="{ maximized: rightMaximized }">
     <!-- 左：图标导航（默认只图标；点第一个图标展开显示名字+近期搜索） -->
     <aside class="rail" :class="{ expanded: leftExpanded }" :style="leftStyle">

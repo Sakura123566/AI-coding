@@ -162,6 +162,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     saved?.spaces?.length ? saved.spaces : [{ id: newId(), name: '默认空间', history: [], favorites: {} }]
   )
   const currentSpaceId = ref<string>(saved?.currentSpaceId ?? spaces.value[0].id)
+  const favoriteDestinationId = ref<string | null>(null)
   const paperTags = ref<Record<string, string[]>>(saved?.paperTags ?? {}) // 全局自定义标签
   const viewed = ref<Record<string, ViewedEntry>>(saved?.viewed ?? {})
   const mode = ref<KpMode>(saved?.mode ?? 'search')
@@ -220,6 +221,16 @@ export const useKpStore = defineStore('knowledgeParty', () => {
 
   function switchSpace(id: string) {
     if (spaces.value.some((s) => s.id === id)) currentSpaceId.value = id
+  }
+
+  function setFavoriteDestination(spaceId: string) {
+    favoriteDestinationId.value = spaceId
+  }
+
+  function consumeFavoriteDestination(): string | null {
+    const id = favoriteDestinationId.value
+    favoriteDestinationId.value = null
+    return id
   }
 
   function addSpace(name: string) {
@@ -450,6 +461,8 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     setMode,
     switchSpace,
     addSpace,
+    setFavoriteDestination,
+    consumeFavoriteDestination,
     ensureSpaceByName,
     setAutoSortByTopic,
     removeSpace,

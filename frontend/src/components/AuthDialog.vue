@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
+import { isDemoMode } from '../config/runtime'
 import { useUserStore } from '../stores/user'
 import { IDENTITY_PRESETS, type ProfileUpdate } from '../types/user'
 
@@ -33,6 +34,14 @@ const regForm = reactive({
 
 const submitting = computed(() => userStore.loading)
 
+async function enterDemo() {
+  await userStore.login({ username: 'demo', password: 'demo123' })
+  if (userStore.isLoggedIn) {
+    ElMessage.success('已进入演示模式')
+    emit('success')
+    visible.value = false
+  }
+}
 async function onSubmit() {
   if (tab.value === 'login') {
     if (!loginForm.username || !loginForm.password) {
@@ -83,6 +92,14 @@ async function onSubmit() {
       <el-tab-pane label="注册" name="register" />
     </el-tabs>
 
+    <el-alert
+      v-if="isDemoMode"
+      class="demo-auth-note"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="演示账号仅保存在当前浏览器，不会创建真实账号。"
+    />
     <el-form label-position="top" @submit.prevent="onSubmit">
       <template v-if="tab === 'login'">
         <el-form-item label="用户名">
@@ -133,6 +150,7 @@ async function onSubmit() {
     </el-form>
 
     <template #footer>
+      <el-button v-if="isDemoMode" @click="enterDemo">一键进入演示</el-button>
       <el-button @click="visible = false">取消</el-button>
       <el-button type="primary" :loading="submitting" @click="onSubmit">
         {{ tab === 'login' ? '登录' : '注册并登录' }}
@@ -144,5 +162,8 @@ async function onSubmit() {
 <style scoped>
 .auth-tabs {
   margin-bottom: 4px;
+}
+.demo-auth-note {
+  margin-bottom: 14px;
 }
 </style>
