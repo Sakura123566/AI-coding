@@ -1,5 +1,5 @@
-// 知识派对全局状态：空间(Spaces)、模式(搜索/收藏/历史)、收藏夹、观看记录、检索结果
-// 持久化到 localStorage，实现「按空间隔离检索记录」的能力。
+// 知识派对全局状态：空间(Spaces)、模式(搜索/收藏/历史)、收藏夹、标签、观看记录、检索结果
+// 持久化到 localStorage，实现「按空间隔离检索记录 / 收藏分组」的能力。
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { fetchResearch, DEFAULT_LIMIT, ResearchApiError, type Paper, type ResearchReport } from '../services/research'
@@ -8,6 +8,7 @@ export interface Space {
   id: string
   name: string
   history: HistoryEntry[]
+  favorites: Record<string, Paper> // 该收藏夹内的论文（按 paper.id 分组）
 }
 
 // 搜索记录条目：查询词 + 时间戳（用于历史页展示「多久前」）
@@ -28,7 +29,7 @@ const STORAGE_KEY = 'kp-store-v1'
 interface PersistShape {
   spaces: Space[]
   currentSpaceId: string
-  favorites: Record<string, Paper>
+  paperTags: Record<string, string[]> // 全局自定义标签（跨收藏夹共享），按 paper.id
   viewed: Record<string, ViewedEntry>
   mode: KpMode
 }
@@ -74,22 +75,47 @@ function normalizeFavorites(raw: any): Record<string, Paper> {
   return out
 }
 
+// 全局标签：按 paper.id 存 string[]，去空、去重
+function normalizeTags(raw: any): Record<string, string[]> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, string[]> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (Array.isArray(v)) {
+      const arr = Array.from(
+        new Set(v.map((t: any) => String(t).trim()).filter((t: string) => t.length > 0))
+      )
+      if (arr.length) out[String(k)] = arr
+    }
+  }
+  return out
+}
+
 function loadState(): PersistShape | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const data = JSON.parse(raw)
+    const legacyFavs = normalizeFavorites(data?.favorites) // 旧版：全局扁平收藏
     const spaces: Space[] = Array.isArray(data?.spaces)
       ? data.spaces.map((s: any) => ({
           id: String(s?.id ?? newId()),
           name: String(s?.name ?? '默认空间'),
-          history: normalizeHistory(s?.history)
+          history: normalizeHistory(s?.history),
+          favorites: normalizeFavorites(s?.favorites)
         }))
-      : [{ id: newId(), name: '默认空间', history: [] }]
+      : [{ id: newId(), name: '默认空间', history: [], favorites: legacyFavs }]
+    // 旧版迁移：若历史数据里存在顶层 favorites（无 spaces），已在上一项处理；
+    // 若有 spaces 同时也有顶层 favorites（过渡态），并入第一个空间（不覆盖已有键）。
+    if (Array.isArray(data?.spaces) && Object.keys(legacyFavs).length) {
+      const f = spaces[0].favorites
+      for (const [k, v] of Object.entries(legacyFavs)) {
+        if (!f[k]) f[k] = v as Paper
+      }
+    }
     return {
       spaces,
       currentSpaceId: String(data?.currentSpaceId ?? spaces[0].id),
-      favorites: normalizeFavorites(data?.favorites),
+      paperTags: normalizeTags(data?.paperTags),
       viewed: normalizeViewed(data?.viewed),
       // 模式需在校验集合内，否则回退 'search'（'graph' 为有效模式，保留）
       mode: (['search', 'favorites', 'history', 'graph'].includes(data?.mode)
@@ -130,10 +156,10 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   const saved = loadState()
 
   const spaces = ref<Space[]>(
-    saved?.spaces?.length ? saved.spaces : [{ id: newId(), name: '默认空间', history: [] }]
+    saved?.spaces?.length ? saved.spaces : [{ id: newId(), name: '默认空间', history: [], favorites: {} }]
   )
   const currentSpaceId = ref<string>(saved?.currentSpaceId ?? spaces.value[0].id)
-  const favorites = ref<Record<string, Paper>>(saved?.favorites ?? {})
+  const paperTags = ref<Record<string, string[]>>(saved?.paperTags ?? {}) // 全局自定义标签
   const viewed = ref<Record<string, ViewedEntry>>(saved?.viewed ?? {})
   const mode = ref<KpMode>(saved?.mode ?? 'search')
 
@@ -173,8 +199,15 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     () => spaces.value.find((s) => s.id === currentSpaceId.value) ?? spaces.value[0]
   )
   const currentHistory = computed(() => currentSpace.value.history)
-  const favoriteList = computed(() => Object.values(favorites.value))
+  // 当前收藏夹的论文列表（切换空间即切换收藏夹）
+  const favoriteList = computed(() => Object.values(currentSpace.value.favorites))
   const viewedList = computed(() => Object.values(viewed.value))
+  // 全局标签汇总（跨收藏夹共享，去重排序），用于收藏页筛选条
+  const allTags = computed(() => {
+    const set = new Set<string>()
+    for (const arr of Object.values(paperTags.value)) for (const t of arr) set.add(t)
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh'))
+  })
 
   function setMode(m: KpMode) {
     mode.value = m
@@ -185,7 +218,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   }
 
   function addSpace(name: string) {
-    const sp: Space = { id: newId(), name, history: [] }
+    const sp: Space = { id: newId(), name, history: [], favorites: {} }
     spaces.value.push(sp)
     currentSpaceId.value = sp.id
   }
@@ -212,26 +245,51 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     viewed.value = { ...viewed.value, [paper.id]: { ...paper, at: Date.now() } }
   }
 
+  // —— 收藏（按当前空间/收藏夹分组）——
   function isFavorite(id: string): boolean {
-    return !!favorites.value[id]
+    return !!currentSpace.value.favorites[id]
   }
 
+  // 收藏/取消收藏：作用于「当前空间」这个收藏夹
   function toggleFavorite(paper: Paper) {
-    if (favorites.value[paper.id]) {
-      const next = { ...favorites.value }
-      delete next[paper.id]
-      favorites.value = next
+    const sp = currentSpace.value
+    const f = { ...sp.favorites }
+    if (f[paper.id]) {
+      delete f[paper.id]
     } else {
-      favorites.value = { ...favorites.value, [paper.id]: paper }
+      f[paper.id] = { ...paper }
     }
+    sp.favorites = f
   }
 
+  // 清空「当前空间」这个收藏夹
   function clearFavorites() {
-    favorites.value = {}
+    currentSpace.value.favorites = {}
   }
 
   function clearViewed() {
     viewed.value = {}
+  }
+
+  // —— 全局自定义标签（跨收藏夹共享）——
+  function tagsOf(id: string): string[] {
+    return paperTags.value[id] ?? []
+  }
+  function addTag(id: string, rawTag: string) {
+    const tag = rawTag.trim()
+    if (!tag) return
+    const cur = paperTags.value[id] ?? []
+    if (cur.includes(tag)) return
+    paperTags.value = { ...paperTags.value, [id]: [...cur, tag] }
+  }
+  function removeTag(id: string, tag: string) {
+    const cur = paperTags.value[id]
+    if (!cur) return
+    const next = cur.filter((t) => t !== tag)
+    const map = { ...paperTags.value }
+    if (next.length) map[id] = next
+    else delete map[id]
+    paperTags.value = map
   }
 
   async function doSearch(query?: string) {
@@ -289,12 +347,12 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   }
 
   watch(
-    [spaces, currentSpaceId, favorites, viewed, mode],
+    [spaces, currentSpaceId, paperTags, viewed, mode],
     () => {
       const data: PersistShape = {
         spaces: spaces.value,
         currentSpaceId: currentSpaceId.value,
-        favorites: favorites.value,
+        paperTags: paperTags.value,
         viewed: viewed.value,
         mode: mode.value
       }
@@ -310,7 +368,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   return {
     spaces,
     currentSpaceId,
-    favorites,
+    paperTags,
     viewed,
     mode,
     topic,
@@ -330,6 +388,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     currentHistory,
     favoriteList,
     viewedList,
+    allTags,
     setMode,
     switchSpace,
     addSpace,
@@ -340,6 +399,9 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     toggleFavorite,
     clearFavorites,
     clearViewed,
+    tagsOf,
+    addTag,
+    removeTag,
     doSearch,
     retry
   }

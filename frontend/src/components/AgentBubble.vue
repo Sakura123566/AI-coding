@@ -240,14 +240,14 @@ function delSession(id: string) {
 </template>
 
 <style scoped>
-/* 紧凑启动按钮：右下角小圆钮，呼吸脉冲，不挡正文 */
+/* 启动按钮：复用对话页头像的"小动画"（🤖 轻晃）作为智能体入口，去掉原先的纯渐变圆钮 */
 .agent-launcher {
   position: fixed;
   right: 18px;
   bottom: 18px;
   z-index: 55;
-  width: 46px;
-  height: 46px;
+  width: 52px;
+  height: 52px;
   border: none;
   border-radius: 50%;
   background: linear-gradient(160deg, #6a5cff 0%, #2b6cff 100%);
@@ -256,29 +256,20 @@ function delSession(id: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: agent-breathe 2.4s ease-in-out infinite;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
 .agent-launcher:hover {
-  transform: scale(1.08);
+  transform: scale(1.06);
+  box-shadow: 0 10px 28px rgba(43, 108, 255, 0.5);
 }
 .agent-launcher:active {
   transform: scale(0.96);
 }
 .agent-launcher-emoji {
-  font-size: 24px;
+  font-size: 26px;
   line-height: 1;
-}
-@keyframes agent-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    box-shadow: 0 8px 22px rgba(43, 108, 255, 0.35);
-  }
-  50% {
-    transform: scale(1.06);
-    box-shadow: 0 10px 28px rgba(43, 108, 255, 0.5);
-  }
+  display: inline-block;
+  animation: agent-bob 2.6s ease-in-out infinite;
 }
 
 /* 小对话窗（非模态浮层） */

@@ -2,6 +2,7 @@
 import { Star, StarFilled } from '@element-plus/icons-vue'
 import { useKpStore } from '../stores/knowledgeParty'
 import type { Paper } from '../services/research'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 defineProps<{
   papers: Paper[]
@@ -15,6 +16,23 @@ function authorsText(p: Paper): string {
 }
 function publishText(p: Paper): string {
   return p.year ? `${p.year} 年` : '年份未知'
+}
+
+async function addTagFor(p: Paper) {
+  try {
+    const { value } = await ElMessageBox.prompt('输入标签名（回车添加）', '给收藏打标签', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '标签不能为空',
+      confirmButtonText: '添加',
+      cancelButtonText: '取消'
+    })
+    if (value && value.trim()) {
+      store.addTag(p.id, value.trim())
+      ElMessage.success('已添加标签')
+    }
+  } catch {
+    /* 取消 */
+  }
 }
 </script>
 
@@ -65,6 +83,21 @@ function publishText(p: Paper): string {
           <span class="meta-label">发布时间</span>
           <span class="meta-value">{{ publishText(p) }}</span>
         </div>
+      </div>
+
+      <!-- 已收藏的论文：展示自定义标签 + 打标签入口 -->
+      <div v-if="store.isFavorite(p.id)" class="paper-tags">
+        <el-tag
+          v-for="t in (store.paperTags[p.id] ?? [])"
+          :key="t"
+          size="small"
+          type="primary"
+          effect="plain"
+          closable
+          class="ptag"
+          @close="store.removeTag(p.id, t)"
+        >{{ t }}</el-tag>
+        <el-button size="small" text bg class="tag-add" @click="addTagFor(p)">＋ 标签</el-button>
       </div>
 
       <div class="paper-foot">
@@ -171,6 +204,21 @@ function publishText(p: Paper): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.paper-tags {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ptag {
+  user-select: none;
+}
+.tag-add {
+  padding: 0 6px;
+  height: 22px;
+  font-size: 12px;
 }
 .paper-foot {
   margin-top: 10px;
