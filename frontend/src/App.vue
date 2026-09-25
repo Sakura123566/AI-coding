@@ -537,17 +537,6 @@ async function createSpace() {
 .rail-label {
   white-space: nowrap;
 }
-.rail-badge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.12);
-  color: inherit;
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-}
 .rail-bottom {
   margin-top: auto;
   width: 100%;
