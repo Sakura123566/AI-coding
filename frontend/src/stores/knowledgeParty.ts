@@ -32,6 +32,7 @@ interface PersistShape {
   paperTags: Record<string, string[]> // 全局自定义标签（跨收藏夹共享），按 paper.id
   viewed: Record<string, ViewedEntry>
   mode: KpMode
+  autoSortByTopic: boolean // 星标时是否按当前主题自动归入/创建主题收藏夹
 }
 
 // 兼容旧版 localStorage：历史曾是 string[]，观看记录无 at 字段
@@ -120,7 +121,9 @@ function loadState(): PersistShape | null {
       // 模式需在校验集合内，否则回退 'search'（'graph' 为有效模式，保留）
       mode: (['search', 'favorites', 'history', 'graph'].includes(data?.mode)
         ? (data?.mode as KpMode)
-        : 'search') ?? 'search'
+        : 'search') ?? 'search',
+      // 按主题自动归类：旧数据缺省也默认开启（用户要求初始打开）
+      autoSortByTopic: typeof data?.autoSortByTopic === 'boolean' ? data.autoSortByTopic : true
     }
   } catch {
     return null
@@ -162,6 +165,8 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   const paperTags = ref<Record<string, string[]>>(saved?.paperTags ?? {}) // 全局自定义标签
   const viewed = ref<Record<string, ViewedEntry>>(saved?.viewed ?? {})
   const mode = ref<KpMode>(saved?.mode ?? 'search')
+  // 星标时按当前主题自动归入/创建主题收藏夹（收藏详情页可开关，默认开启）
+  const autoSortByTopic = ref<boolean>(saved?.autoSortByTopic ?? true)
 
   // 检索结果（全应用共享，App / HistoryView 等均通过 store 读取同一份）
   const topic = ref('')
@@ -221,6 +226,20 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     const sp: Space = { id: newId(), name, history: [], favorites: {} }
     spaces.value.push(sp)
     currentSpaceId.value = sp.id
+  }
+
+  // 按名称查找收藏夹（精确匹配）；不存在则创建，**但不切换**当前收藏夹
+  function ensureSpaceByName(name: string): string {
+    const n = name.trim()
+    const existing = spaces.value.find((s) => s.name === n)
+    if (existing) return existing.id
+    const sp: Space = { id: newId(), name: n, history: [], favorites: {} }
+    spaces.value.push(sp)
+    return sp.id
+  }
+
+  function setAutoSortByTopic(v: boolean) {
+    autoSortByTopic.value = v
   }
 
   function removeSpace(id: string) {
@@ -384,14 +403,15 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   }
 
   watch(
-    [spaces, currentSpaceId, paperTags, viewed, mode],
+    [spaces, currentSpaceId, paperTags, viewed, mode, autoSortByTopic],
     () => {
       const data: PersistShape = {
         spaces: spaces.value,
         currentSpaceId: currentSpaceId.value,
         paperTags: paperTags.value,
         viewed: viewed.value,
-        mode: mode.value
+        mode: mode.value,
+        autoSortByTopic: autoSortByTopic.value
       }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
@@ -426,9 +446,12 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     favoriteList,
     viewedList,
     allTags,
+    autoSortByTopic,
     setMode,
     switchSpace,
     addSpace,
+    ensureSpaceByName,
+    setAutoSortByTopic,
     removeSpace,
     recordSearch,
     markViewed,

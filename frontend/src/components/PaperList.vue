@@ -47,6 +47,25 @@ function cancelAllFav() {
   ElMessage.success('已取消全部收藏')
 }
 
+// 星标主入口：根据「按主题自动归类」开关决定直接归入主题收藏夹，还是弹出手动选择
+function onStar(p: Paper) {
+  // 已收藏：打开弹窗做管理（移入其它收藏夹 / 取消）
+  if (store.isFavInAny(p.id)) {
+    openFav(p)
+    return
+  }
+  const topic = (store.topic || '').trim()
+  if (store.autoSortByTopic && topic) {
+    // 默认按当前主题归入收藏夹：不存在则自动创建（不切换当前收藏夹）
+    const sid = store.ensureSpaceByName(topic)
+    store.addToSpace(sid, p)
+    ElMessage.success(`已收藏到「${topic}」`)
+  } else {
+    // 开关关闭或主题为空：退回手动选择收藏夹
+    openFav(p)
+  }
+}
+
 // 在弹窗里直接新建收藏夹，并把当前论文收进去
 async function createSpaceAndAdd() {
   try {
@@ -113,8 +132,8 @@ async function addTagFor(p: Paper) {
           :plain="!store.isFavInAny(p.id)"
           circle
           size="small"
-          title="选择收藏夹"
-          @click="openFav(p)"
+          :title="store.isFavInAny(p.id) ? '管理收藏' : '收藏到主题收藏夹'"
+          @click="onStar(p)"
         >
           <el-icon>
             <component :is="store.isFavInAny(p.id) ? StarFilled : Star" />

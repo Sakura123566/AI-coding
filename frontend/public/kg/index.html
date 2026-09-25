@@ -378,9 +378,9 @@ function labelVisible(level, which){
   if(S.showAll) return true;
   const z = curScale(which);
   if(level <= 1) return true;          // 核心 / 一级节点始终显示名字
-  if(level === 2) return z >= 1.4;     // 放大到 1.4x，二级节点名字浮现
-  if(level === 3) return z >= 2.2;     // 放大到 2.2x，三级节点名字浮现
-  return z >= 3.2;                     // 更深节点继续随放大浮现
+  if(level === 2) return z >= 1.1;     // 轻微放大即浮现二级节点名字
+  if(level === 3) return z >= 1.45;    // 继续放大浮现三级节点名字
+  return z >= 1.9;                     // 更深节点继续随放大浮现
 }
 
 function circleNode(id, label, level, bx, by, cat, imp, which, opt){

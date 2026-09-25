@@ -59,6 +59,16 @@ async function newCollection() {
         <el-option v-for="s in store.spaces" :key="s.id" :label="s.name" :value="s.id" />
       </el-select>
       <el-button size="small" @click="newCollection">＋ 新建收藏夹</el-button>
+      <span class="auto-sort">
+        <el-tooltip content="开启后，点星标会把文献自动收进以当前主题命名的收藏夹（没有则自动创建）" placement="top">
+          <span class="auto-sort-label">按主题自动归类</span>
+        </el-tooltip>
+        <el-switch
+          :model-value="store.autoSortByTopic"
+          @change="store.setAutoSortByTopic"
+          size="small"
+        />
+      </span>
       <el-tag round type="info" class="coll-count">{{ displayed.length }}</el-tag>
     </div>
 
@@ -109,6 +119,18 @@ async function newCollection() {
 }
 .coll-count {
   margin-left: auto;
+}
+.auto-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  color: #6b7280;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.auto-sort-label {
+  user-select: none;
 }
 .tag-filter {
   display: flex;
