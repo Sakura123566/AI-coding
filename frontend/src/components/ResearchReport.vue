@@ -12,7 +12,7 @@ const props = defineProps<{
 // paper_ids -> 标题，便于在主题/阅读路线里展示可读的论文名
 const titleById = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {}
-  for (const p of props.papers ?? []) map[p.id] = p.title
+  for (const p of props.papers ?? []) map[p.id] = p.titleZh || p.title
   return map
 })
 function titleOf(id: string): string {

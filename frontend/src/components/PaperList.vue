@@ -11,6 +11,24 @@ defineProps<{
 
 const store = useKpStore()
 
+
+const NO_INFO_ABSTRACT = /^信息有限[，,](?:无法(?:翻译|提供)摘要|无法提供有效摘要)/
+
+function cleanAbstract(value?: string): string {
+  const text = (value || '').trim()
+  return text && !NO_INFO_ABSTRACT.test(text) ? text : ''
+}
+
+function displayAbstract(p: Paper): string {
+  const original = cleanAbstract(p.abstract)
+  if (!original) return ''
+  return cleanAbstract(p.abstractSummaryZh) || cleanAbstract(p.abstractZh) || original
+}
+
+function hasOriginalAbstract(p: Paper): boolean {
+  const original = cleanAbstract(p.abstract)
+  return !!original && original !== displayAbstract(p)
+}
 function authorsText(p: Paper): string {
   if (!p.authors || p.authors.length === 0) return '作者未知'
   return p.authors.join(', ')
@@ -124,8 +142,9 @@ async function addTagFor(p: Paper) {
             rel="noopener"
             :title="p.title"
             @click="store.markViewed(p)"
-          >{{ p.title }}</a>
-          <span v-else class="paper-title-text" :title="p.title">{{ p.title }}</span>
+          >{{ p.titleZh || p.title }}</a>
+          <span v-else class="paper-title-text" :title="p.title">{{ p.titleZh || p.title }}</span>
+          <div v-if="p.titleZh && p.titleZh !== p.title" class="paper-title-original">{{ p.title }}</div>
         </div>
         <el-button
           class="fav-btn"
@@ -142,7 +161,12 @@ async function addTagFor(p: Paper) {
         </el-button>
       </div>
 
-      <p class="paper-abstract">{{ p.abstract || '暂无摘要' }}</p>
+      <p v-if="displayAbstract(p)" class="paper-abstract">{{ displayAbstract(p) }}</p>
+      <p v-else class="paper-abstract paper-abstract-missing">该来源暂未提供摘要。</p>
+      <details v-if="hasOriginalAbstract(p)" class="paper-original">
+        <summary>查看原始摘要</summary>
+        <p>{{ p.abstract }}</p>
+      </details>
 
       <div class="paper-meta">
         <div class="meta-row">
@@ -251,6 +275,28 @@ async function addTagFor(p: Paper) {
 .paper-title {
   flex: 1 1 auto;
   min-width: 0;
+}
+.paper-title-original {
+  margin-top: 4px;
+  color: #8a94a6;
+  font-size: 11.5px;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.paper-original {
+  margin-top: 6px;
+  color: #8a94a6;
+  font-size: 11.5px;
+}
+.paper-original summary {
+  cursor: pointer;
+}
+.paper-original p {
+  margin: 6px 0 0;
+  line-height: 1.5;
 }
 .paper-title a {
   color: var(--el-color-primary);
