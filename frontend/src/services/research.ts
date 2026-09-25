@@ -1,4 +1,4 @@
-import { apiBase, isDemoMode } from '../config/runtime'
+import { apiBase, isDemoMode } from '../config/runtime.ts'
 // 前后端契约类型 + 数据获取层
 // 前端只调用 POST /api/research/run（以及 GET /api/health 用于探活），
 // 不接触任何模型密钥 / MCP（由后端完成）。
@@ -19,9 +19,14 @@ export const DEFAULT_LIMIT = 10
 export interface Paper {
   id: string
   title: string
+  titleZh?: string
   authors: string[]
   year: number // 0 表示缺失，UI 显示「年份未知」
   abstract: string // '' 表示缺失，UI 显示「暂无摘要」
+  abstractZh?: string
+  abstractSummaryZh?: string
+  translationStatus?: string
+  translationNote?: string
   url: string | null
   source: string // '' 表示缺失，UI 不显示来源标签
 }
@@ -108,10 +113,11 @@ const API_BASE = apiBase
 const USE_MOCK = isDemoMode
 
 // 字段归一化：后端返回的字段名可能略有差异，这里统一成前端使用的字段。
-function normalizePaper(p: any): Paper {
+export function normalizePaper(p: any): Paper {
   return {
     id: String(p?.id ?? ''),
-    title: String(p?.title ?? p?.titleZh ?? '未命名文献'),
+    title: String(p?.title ?? p?.title_zh ?? p?.titleZh ?? '未命名文献'),
+    titleZh: p?.title_zh ? String(p.title_zh) : p?.titleZh ? String(p.titleZh) : '',
     authors: Array.isArray(p?.authors)
       ? p.authors.map(String)
       : p?.author
@@ -120,6 +126,10 @@ function normalizePaper(p: any): Paper {
     // year 可能为 null → 归一成 0，UI 显示「年份未知」
     year: Number(p?.year ?? p?.publishedYear ?? p?.yearPublished ?? 0) || 0,
     abstract: String(p?.abstract ?? p?.summary ?? ''),
+    abstractZh: p?.abstract_zh ? String(p.abstract_zh) : p?.abstractZh ? String(p.abstractZh) : '',
+    abstractSummaryZh: p?.abstract_summary_zh ? String(p.abstract_summary_zh) : p?.abstractSummaryZh ? String(p.abstractSummaryZh) : '',
+    translationStatus: p?.translation_status ? String(p.translation_status) : p?.translationStatus ? String(p.translationStatus) : '',
+    translationNote: p?.translation_note ? String(p.translation_note) : p?.translationNote ? String(p.translationNote) : '',
     // url 可能为 null（后端未拿到原文链接），保持可空，UI 层据此禁用外链
     url: p?.url ? String(p.url) : null,
     // source 可能为 null → 归一成 ''，UI 不显示来源标签
