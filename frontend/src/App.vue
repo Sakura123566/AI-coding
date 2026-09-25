@@ -97,7 +97,7 @@ async function onLogoutClick() {
 // —— 布局状态 ——
 // 左：图标导航（默认只显示图标，点击第一个图标展开显示名字+近期搜索）；中：模式视图；右：方向概览
 const leftExpanded = ref(false) // 默认只显示图标
-const rightCollapsed = ref(false)
+const rightCollapsed = ref(true) // 默认收起，查找论文后自动弹出
 const rightMaximized = ref(false)
 const leftWidth = ref(220) // 展开后的左栏宽度（可拖拽）
 const rightWidth = ref(460) // 右方向概览面板可拖拽宽度
@@ -206,8 +206,10 @@ const visiblePapers = computed(() => store.papers.slice(0, visibleCount.value))
 const hasMore = computed(() => visibleCount.value < store.papers.length)
 watch(
   () => store.papers,
-  () => {
+  (p) => {
     visibleCount.value = pageSize
+    // 查到论文后自动展开右侧「方向概览」（用户手动收起后，下次搜索仍会重新弹出）
+    if (p && p.length > 0) rightCollapsed.value = false
   }
 )
 async function loadMore() {

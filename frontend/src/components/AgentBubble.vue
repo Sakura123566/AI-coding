@@ -1,28 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useKpStore } from '@/stores/knowledgeParty'
 import { useAgentChatStore } from '@/stores/agentChat'
 import EmotionAvatar from '@/components/emotion/EmotionAvatar.vue'
 import { useSpeech } from '@/composables/useSpeech'
 import { useAgentSettings } from '@/composables/useAgentSettings'
 
-// 智能体浮标：右侧可拖动的（长）椭圆，会冒小话暗示自己是智能体；
-// 点击弹出【小对话窗】（非模态浮层，不遮挡页面，可拖拽），具体对话能力由后端后续接入。
-const pos = ref({ x: 0, y: 0 })
-const dragging = ref(false)
-const moved = ref(false)
+// 智能体入口：右下角紧凑启动按钮（不挡视线）；对话时聊天框标题头像带小动画。
+// 具体对话能力由后端提供（多轮 + 历史本地持久化，见 stores/agentChat）。
 const chatOpen = ref(false)
 const chatPos = ref({ x: 0, y: 0 })
-
-const hints = [
-  '我是研究小助手，有疑问戳我～',
-  '点我一下，咱们聊聊这篇文献',
-  '需要我帮你梳理方向吗？',
-  '我是智能体，随时待命帮你导航',
-  '卡住了？问我准没错 😉'
-]
-const hintIdx = ref(0)
-let hintTimer: ReturnType<typeof setInterval> | null = null
 
 const CHAT_W = 330
 const CHAT_H = 460
@@ -34,54 +21,23 @@ const emotionSessionId = computed(() => {
   return params.get('emotionSession') || store.emotionSessionId
 })
 
+const chat = useAgentChatStore()
+
 onMounted(() => {
-  // 默认位置：右边中上部
-  pos.value = { x: window.innerWidth - 96, y: Math.round(window.innerHeight * 0.3) }
-  hintTimer = setInterval(() => {
-    hintIdx.value = (hintIdx.value + 1) % hints.length
-  }, 4200)
   chat.ensureSession()
 })
-onBeforeUnmount(() => {
-  if (hintTimer) clearInterval(hintTimer)
-})
 
-let start = { x: 0, y: 0, px: 0, py: 0 }
-function onDown(e: MouseEvent) {
-  dragging.value = true
-  moved.value = false
-  start = { x: e.clientX, y: e.clientY, px: pos.value.x, py: pos.value.y }
-  window.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', onUp)
-  document.body.style.userSelect = 'none'
-}
-function onMove(e: MouseEvent) {
-  if (!dragging.value) return
-  const dx = e.clientX - start.x
-  const dy = e.clientY - start.y
-  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved.value = true
-  pos.value = {
-    x: Math.max(8, Math.min(window.innerWidth - 80, start.px + dx)),
-    y: Math.max(8, Math.min(window.innerHeight - 130, start.py + dy))
+function openChat() {
+  if (chatOpen.value) return
+  chatOpen.value = true
+  // 默认出现在右下角、启动按钮左上方，避免超出视口
+  chatPos.value = {
+    x: Math.max(8, window.innerWidth - CHAT_W - 16),
+    y: Math.max(8, window.innerHeight - CHAT_H - 72)
   }
 }
-function onUp() {
-  dragging.value = false
-  window.removeEventListener('mousemove', onMove)
-  window.removeEventListener('mouseup', onUp)
-  document.body.style.userSelect = ''
-}
-function onClick() {
-  // 拖动过则不视为点击
-  if (moved.value) return
-  chatOpen.value = !chatOpen.value
-  if (chatOpen.value) {
-    // 小窗默认出现在浮标左侧，避免超出视口
-    chatPos.value = {
-      x: Math.max(8, Math.min(window.innerWidth - CHAT_W - 8, pos.value.x - CHAT_W - 16)),
-      y: Math.max(8, Math.min(window.innerHeight - CHAT_H - 8, pos.value.y - 40))
-    }
-  }
+function closeChat() {
+  chatOpen.value = false
 }
 
 // —— 小对话窗拖拽（按标题栏拖动）——
@@ -125,7 +81,6 @@ function maybeAutoPlay(text: string) {
 }
 
 // —— 对话：多轮 + 历史（本地优先持久化，见 stores/agentChat）——
-const chat = useAgentChatStore()
 const input = ref('')
 const view = ref<'chat' | 'history'>('chat')
 const chatBody = ref<HTMLElement | null>(null)
@@ -170,32 +125,28 @@ function delSession(id: string) {
 </script>
 
 <template>
-  <div
-    class="agent-float"
-    :class="{ dragging }"
-    :style="{ left: pos.x + 'px', top: pos.y + 'px' }"
+  <!-- 紧凑启动按钮：右下角，不挡视线 -->
+  <button
+    v-if="!chatOpen"
+    class="agent-launcher"
+    title="打开研究智能体"
+    @click="openChat"
   >
-    <!-- 小话气泡：暗示自己是智能体 -->
-    <div class="agent-hint">{{ hints[hintIdx] }}</div>
-    <!-- 长椭圆浮标 -->
-    <div
-      class="agent-bubble"
-      title="我是研究智能体，戳我聊天"
-      @mousedown="onDown"
-      @click="onClick"
-    >
-      <span class="agent-emoji">🤖</span>
-    </div>
-  </div>
+    <span class="agent-launcher-emoji">🤖</span>
+  </button>
 
-  <!-- 小对话窗：非模态浮层，不遮挡页面，可拖拽 -->
+  <!-- 小对话窗：非模态浮层，可拖拽；对话时标题头像带小动画 -->
   <div
     v-if="chatOpen"
     class="agent-chat"
     :style="{ left: chatPos.x + 'px', top: chatPos.y + 'px', width: CHAT_W + 'px' }"
   >
     <div class="agent-chat-head" @mousedown="onChatDown">
-      <span class="agent-chat-title">🤖 研究智能体</span>
+      <span class="agent-chat-avatar" :class="{ thinking: chat.loading }">🤖</span>
+      <span class="agent-chat-title">
+        研究智能体
+        <span v-if="chat.loading" class="agent-chat-dots"><i></i><i></i><i></i></span>
+      </span>
       <div class="agent-chat-actions">
         <button
           v-if="view === 'chat'"
@@ -215,7 +166,7 @@ function delSession(id: string) {
           class="agent-chat-close"
           title="收起"
           @mousedown.stop
-          @click.stop="chatOpen = false"
+          @click.stop="closeChat"
         >×</button>
       </div>
     </div>
@@ -289,35 +240,36 @@ function delSession(id: string) {
 </template>
 
 <style scoped>
-.agent-float {
+/* 紧凑启动按钮：右下角小圆钮，呼吸脉冲，不挡正文 */
+.agent-launcher {
   position: fixed;
+  right: 18px;
+  bottom: 18px;
   z-index: 55;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: grab;
-}
-.agent-float.dragging {
-  cursor: grabbing;
-}
-/* 长椭圆（竖向）浮标 */
-.agent-bubble {
-  width: 56px;
-  height: 92px;
+  width: 46px;
+  height: 46px;
+  border: none;
   border-radius: 50%;
   background: linear-gradient(160deg, #6a5cff 0%, #2b6cff 100%);
   box-shadow: 0 8px 22px rgba(43, 108, 255, 0.35);
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  animation: agent-pulse 2.4s ease-in-out infinite;
-  user-select: none;
+  animation: agent-breathe 2.4s ease-in-out infinite;
+  transition: transform 0.15s ease;
 }
-.agent-emoji {
-  font-size: 26px;
+.agent-launcher:hover {
+  transform: scale(1.08);
 }
-@keyframes agent-pulse {
+.agent-launcher:active {
+  transform: scale(0.96);
+}
+.agent-launcher-emoji {
+  font-size: 24px;
+  line-height: 1;
+}
+@keyframes agent-breathe {
   0%,
   100% {
     transform: scale(1);
@@ -327,31 +279,6 @@ function delSession(id: string) {
     transform: scale(1.06);
     box-shadow: 0 10px 28px rgba(43, 108, 255, 0.5);
   }
-}
-/* 小话气泡 */
-.agent-hint {
-  max-width: 180px;
-  margin-bottom: 10px;
-  padding: 7px 11px;
-  border-radius: 12px;
-  background: #fff;
-  border: 1px solid #e3e6eb;
-  color: #5a6b8c;
-  font-size: 12px;
-  line-height: 1.5;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  position: relative;
-}
-.agent-hint::after {
-  content: '';
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: #fff;
-  border-bottom: 0;
 }
 
 /* 小对话窗（非模态浮层） */
@@ -371,16 +298,88 @@ function delSession(id: string) {
 .agent-chat-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 10px 12px;
   background: linear-gradient(160deg, #6a5cff 0%, #2b6cff 100%);
   color: #fff;
   cursor: move;
   flex: 0 0 auto;
 }
+/* 标题上的智能体头像：待机轻晃；思考时抖动（对话时的小动画） */
+.agent-chat-avatar {
+  font-size: 18px;
+  line-height: 1;
+  display: inline-block;
+  animation: agent-bob 2.6s ease-in-out infinite;
+}
+.agent-chat-avatar.thinking {
+  animation: agent-shake 0.9s ease-in-out infinite;
+}
+@keyframes agent-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-2px) rotate(-6deg);
+  }
+  75% {
+    transform: translateY(-2px) rotate(6deg);
+  }
+}
+@keyframes agent-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  20% {
+    transform: translateX(-2px) rotate(-8deg);
+  }
+  50% {
+    transform: translateX(2px) rotate(8deg);
+  }
+  80% {
+    transform: translateX(-1px) rotate(-4deg);
+  }
+}
 .agent-chat-title {
+  flex: 1 1 auto;
   font-size: 14px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* “思考中”省略号动画 */
+.agent-chat-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.agent-chat-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.6;
+  animation: agent-dot 1.2s infinite ease-in-out;
+}
+.agent-chat-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.agent-chat-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes agent-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
 .agent-chat-actions {
   display: flex;
