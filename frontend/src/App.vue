@@ -656,8 +656,9 @@ async function createSpace() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
   max-width: 1000px;
-  margin-top: 8px;
+  margin: 8px auto 0;
 }
 .resolved-kw {
   font-size: 13px;
@@ -687,7 +688,9 @@ async function createSpace() {
 
 /* 中间模式视图（图谱等） */
 .mode-view {
+  width: 100%;
   max-width: 1000px;
+  margin: 0 auto;
 }
 .mode-title {
   font-size: 18px;
