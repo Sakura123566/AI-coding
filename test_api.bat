@@ -11,7 +11,7 @@ echo ============================================
 echo.
 
 if not exist ".venv\Scripts\python.exe" (
-  echo [ERROR] .venv not found. Please run run_backend_setup.bat first.
+  echo [ERROR] .venv not found. Please run start_backend.bat first.
   echo.
   pause
   exit /b 1

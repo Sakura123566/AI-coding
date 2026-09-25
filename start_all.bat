@@ -15,15 +15,15 @@ if not exist "start_backend.bat" (
 )
 if not exist "start_frontend.bat" (
   echo [ERROR] start_frontend.bat not found.
-  echo Please put start_frontend.bat in the same (root) folder.
+  echo Please put start_frontend.bat in the same root folder.
   pause
   exit /b 1
 )
 
-echo [1/2] Opening BACKEND window (port 8000) ...
+echo [1/2] Opening BACKEND window, port 8000 ...
 start "RN-Backend" /D "%~dp0" cmd /k start_backend.bat
 
-echo [2/2] Opening FRONTEND window (port 5173) ...
+echo [2/2] Opening FRONTEND window, port 5173 ...
 start "RN-Frontend" /D "%~dp0" cmd /k start_frontend.bat
 
 echo.
