@@ -128,7 +128,7 @@
 
 <header>
   <div class="row">
-    <div class="demo-kg-note">演示模式：图谱为内置样例，不代表真实个人数据。</div>
+    <div class="demo-kg-note" id="demoKgNote">演示模式：图谱为内置样例，不代表真实个人数据。</div>
     <div class="tabs">
       <div class="tab on" data-tab="explore">探索型</div>
       <div class="tab" data-tab="memory">长期图谱</div>
@@ -228,7 +228,7 @@
 
   <aside id="sideMemory" class="hidden">
     <div class="card" id="kgOverview">
-      <h3>演示知识图谱 <span id="kgCount" class="badge b-hit"></span></h3>
+      <h3><span id="kgTitleText">演示知识图谱</span> <span id="kgCount" class="badge b-hit"></span></h3>
       <div class="hint" id="kgHint">这是演示用的长期知识图谱。点击任意主题节点，可查看详情、生成利弊分析、或删除分支；所有修改只保存在当前浏览器。</div>
       <div class="card" style="margin-top:10px;">
         <h3>分类图例</h3>
@@ -262,8 +262,13 @@
      登录态通过 localStorage['kp-user-v2'] 的 token 自动带入；未登录会回退内置样例）。
    接真实后端时把下面 base 改成你的后端地址（如 'http://127.0.0.1:8000'）并置 useMock=false。
 */
-const KG_API = { base: '', useMock: true };
+const KG_API = { base: 'http://127.0.0.1:8000', useMock: false };
 function apiEnabled(){ return !KG_API.useMock && !!KG_API.base; }
+if(apiEnabled()){
+  document.getElementById('demoKgNote').classList.add('hidden');
+  document.getElementById('kgTitleText').textContent = '长期知识图谱';
+  document.getElementById('kgHint').textContent = '这是你的长期知识图谱。点击任意主题节点，可查看详情、生成利弊分析、或删除分支。';
+}
 function getToken(){ try{ const d = JSON.parse(localStorage.getItem('kp-user-v2') || '{}'); return d && d.token ? d.token : ''; }catch(e){ return ''; } }
 function authH(){ const t = getToken(); return t ? { Authorization: 'Bearer ' + t } : {}; }
 async function apiGet(path){ const r = await fetch(KG_API.base + path, { headers: authH() }); if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
@@ -701,8 +706,8 @@ async function loadMap(){
       const j = await apiGet('/api/kg/map');
       data = normalizeMap(j);
     }catch(e){
-      showToast('加载真实图谱失败：' + e.message + '（已回退内置样例）', 'err');
-      data = mockMap();
+      showToast('加载真实图谱失败：' + e.message, 'err');
+      data = { nodes: [], tree: [], co: [] };
     }
   } else {
     data = mockMap();
