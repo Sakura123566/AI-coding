@@ -262,6 +262,43 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     sp.favorites = f
   }
 
+  // 是否收藏在「任意」收藏夹里（用于论文卡片星标态，跨空间）
+  function isFavInAny(id: string): boolean {
+    return spaces.value.some((s) => s.favorites[id])
+  }
+
+  // 列出包含该论文的所有收藏夹 id（用于弹窗里展示勾选态）
+  function favoriteSpaceIdsOf(id: string): string[] {
+    return spaces.value.filter((s) => s.favorites[id]).map((s) => s.id)
+  }
+
+  // 把论文加入指定收藏夹（不覆盖其它收藏夹里的同篇）
+  function addToSpace(spaceId: string, paper: Paper) {
+    const sp = spaces.value.find((s) => s.id === spaceId)
+    if (!sp) return
+    sp.favorites = { ...sp.favorites, [paper.id]: { ...paper } }
+  }
+
+  // 从指定收藏夹移除该论文
+  function removeFromSpace(spaceId: string, paperId: string) {
+    const sp = spaces.value.find((s) => s.id === spaceId)
+    if (!sp) return
+    const f = { ...sp.favorites }
+    delete f[paperId]
+    sp.favorites = f
+  }
+
+  // 取消该论文在「所有」收藏夹里的收藏
+  function cancelAllFavorites(paperId: string) {
+    for (const s of spaces.value) {
+      if (s.favorites[paperId]) {
+        const f = { ...s.favorites }
+        delete f[paperId]
+        s.favorites = f
+      }
+    }
+  }
+
   // 清空「当前空间」这个收藏夹
   function clearFavorites() {
     currentSpace.value.favorites = {}
@@ -397,6 +434,11 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     markViewed,
     isFavorite,
     toggleFavorite,
+    isFavInAny,
+    favoriteSpaceIdsOf,
+    addToSpace,
+    removeFromSpace,
+    cancelAllFavorites,
     clearFavorites,
     clearViewed,
     tagsOf,

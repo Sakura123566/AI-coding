@@ -16,6 +16,8 @@ const CHAT_H = 460
 
 // 情绪头像：用 store 的稳定会话 id（可经 URL ?emotionSession= 覆盖，便于后端联调）
 const store = useKpStore()
+// 启动按钮图标：用情绪头像待机图（public/emojis/persona_idle.webp），与对话页头像一致
+const launcherIcon = (import.meta.env.BASE_URL || '/') + 'emojis/persona_idle.webp'
 const emotionSessionId = computed(() => {
   const params = new URLSearchParams(window.location.search)
   return params.get('emotionSession') || store.emotionSessionId
@@ -125,14 +127,14 @@ function delSession(id: string) {
 </script>
 
 <template>
-  <!-- 紧凑启动按钮：右下角，不挡视线 -->
+  <!-- 紧凑启动按钮：右下角，不挡视线；图标用情绪头像待机图，保留轻晃小动画 -->
   <button
     v-if="!chatOpen"
     class="agent-launcher"
     title="打开研究智能体"
     @click="openChat"
   >
-    <span class="agent-launcher-emoji">🤖</span>
+    <img class="agent-launcher-img" :src="launcherIcon" alt="研究智能体" />
   </button>
 
   <!-- 小对话窗：非模态浮层，可拖拽；对话时标题头像带小动画 -->
@@ -265,10 +267,11 @@ function delSession(id: string) {
 .agent-launcher:active {
   transform: scale(0.96);
 }
-.agent-launcher-emoji {
-  font-size: 26px;
-  line-height: 1;
+.agent-launcher-img {
+  width: 30px;
+  height: 30px;
   display: inline-block;
+  object-fit: contain;
   animation: agent-bob 2.6s ease-in-out infinite;
 }
 

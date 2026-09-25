@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { Star, StarFilled } from '@element-plus/icons-vue'
 import { useKpStore } from '../stores/knowledgeParty'
 import type { Paper } from '../services/research'
@@ -16,6 +17,34 @@ function authorsText(p: Paper): string {
 }
 function publishText(p: Paper): string {
   return p.year ? `${p.year} 年` : '年份未知'
+}
+
+// —— 星标弹窗：选收藏夹（跨收藏夹收藏/移除）——
+const favDialogVisible = ref(false)
+const favTarget = ref<Paper | null>(null)
+// 当前论文已落入的收藏夹 id 列表（随 store 变化响应式更新）
+const favTargetIn = computed<string[]>(() =>
+  favTarget.value ? store.favoriteSpaceIdsOf(favTarget.value.id) : []
+)
+
+function openFav(p: Paper) {
+  favTarget.value = p
+  favDialogVisible.value = true
+}
+function toggleFavSpace(spaceId: string) {
+  const p = favTarget.value
+  if (!p) return
+  if (favTargetIn.value.includes(spaceId)) {
+    store.removeFromSpace(spaceId, p.id)
+  } else {
+    store.addToSpace(spaceId, p)
+  }
+}
+function cancelAllFav() {
+  const p = favTarget.value
+  if (!p) return
+  store.cancelAllFavorites(p.id)
+  ElMessage.success('已取消全部收藏')
 }
 
 async function addTagFor(p: Paper) {
@@ -59,15 +88,15 @@ async function addTagFor(p: Paper) {
         </div>
         <el-button
           class="fav-btn"
-          :type="store.isFavorite(p.id) ? 'warning' : 'info'"
-          :plain="!store.isFavorite(p.id)"
+          :type="store.isFavInAny(p.id) ? 'warning' : 'info'"
+          :plain="!store.isFavInAny(p.id)"
           circle
           size="small"
-          :title="store.isFavorite(p.id) ? '取消收藏' : '收藏'"
-          @click="store.toggleFavorite(p)"
+          title="选择收藏夹"
+          @click="openFav(p)"
         >
           <el-icon>
-            <component :is="store.isFavorite(p.id) ? StarFilled : Star" />
+            <component :is="store.isFavInAny(p.id) ? StarFilled : Star" />
           </el-icon>
         </el-button>
       </div>
@@ -86,7 +115,7 @@ async function addTagFor(p: Paper) {
       </div>
 
       <!-- 已收藏的论文：展示自定义标签 + 打标签入口 -->
-      <div v-if="store.isFavorite(p.id)" class="paper-tags">
+      <div v-if="store.isFavInAny(p.id)" class="paper-tags">
         <el-tag
           v-for="t in (store.paperTags[p.id] ?? [])"
           :key="t"
@@ -113,6 +142,42 @@ async function addTagFor(p: Paper) {
       </div>
     </el-card>
   </div>
+
+  <!-- 星标弹窗：选择把论文收藏到哪个收藏夹（可跨多个；可取消） -->
+  <el-dialog
+    v-model="favDialogVisible"
+    title="选择收藏夹"
+    width="360px"
+    align-center
+    append-to-body
+  >
+    <div v-if="favTarget" class="fav-space-list">
+      <div class="fav-space-target" :title="favTarget.title">{{ favTarget.title }}</div>
+      <div
+        v-for="s in store.spaces"
+        :key="s.id"
+        class="fav-space-row"
+      >
+        <span class="fav-space-name">{{ s.name }}</span>
+        <el-button
+          size="small"
+          :type="favTargetIn.includes(s.id) ? 'warning' : 'default'"
+          :plain="!favTargetIn.includes(s.id)"
+          @click="toggleFavSpace(s.id)"
+        >{{ favTargetIn.includes(s.id) ? '已收藏 ✓' : '收藏到此处' }}</el-button>
+      </div>
+    </div>
+    <template #footer>
+      <el-button
+        v-if="favTargetIn.length"
+        type="danger"
+        plain
+        size="small"
+        @click="cancelAllFav"
+      >取消全部收藏</el-button>
+      <el-button size="small" type="primary" @click="favDialogVisible = false">完成</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -235,5 +300,42 @@ async function addTagFor(p: Paper) {
 .paper-nolink {
   font-size: 13px;
   color: #b0b6be;
+}
+/* 星标弹窗：收藏夹列表 */
+.fav-space-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fav-space-target {
+  font-size: 13px;
+  color: #1f2329;
+  font-weight: 600;
+  line-height: 1.4;
+  max-height: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef0f2;
+}
+.fav-space-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 2px;
+}
+.fav-space-name {
+  font-size: 13.5px;
+  color: #3a4256;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

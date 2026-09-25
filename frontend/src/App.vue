@@ -268,9 +268,6 @@ async function createSpace() {
         >
           <el-icon class="rail-icon"><component :is="item.icon" /></el-icon>
           <span v-if="leftExpanded" class="rail-label">{{ item.label }}</span>
-          <span v-if="item.key === 'favorites' && store.favoriteList.length" class="rail-badge">
-            {{ store.favoriteList.length }}
-          </span>
         </div>
       </nav>
 
