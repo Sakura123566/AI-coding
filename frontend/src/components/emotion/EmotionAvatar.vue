@@ -11,13 +11,14 @@
  *
  * 依赖：src/assets/emotion-map.json（状态->webp 文件名），webp 全部放 public/emojis/。
  */
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import emotionMap from '@/assets/emotion-map.json'
 
 const props = defineProps({
   sessionId: { type: String, required: true },
   apiBase: { type: String, default: '' },
   size: { type: Number, default: 160 },
+  state: { type: String, default: '' },
 })
 
 // 解析后端地址：URL 参数优先，其次 prop，其次构建期环境变量，最后默认 localhost
@@ -39,12 +40,47 @@ const file = ref(map['待机'] || '')
 let es: EventSource | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
 
+// 聊天接口返回的是约定值（idle/thinking/happy/...），SSE 返回的是 Avatar 中文状态。
+// 两种命名都在这里归一，避免接口返回了 emotion 但图片看起来没有变化。
+const EMOTION_ALIASES: Record<string, string> = {
+  idle: '待机',
+  sleepy: '待机疲惫',
+  happy: '开心',
+  excited: '灵光一现',
+  confused: '温柔安抚',
+  thinking: '论文搜索',
+  searching: '论文搜索',
+  reading: '阅读论文',
+  coding: '编写代码',
+  collaborating: '协作',
+  eureka: '灵光一现',
+  success: '灵光一现',
+  error: '温柔安抚',
+}
+
+function normalizeEmotion(name: string): string {
+  const raw = String(name || '').trim()
+  if (!raw) return '待机'
+  if (map[raw]) return raw
+  return EMOTION_ALIASES[raw.toLowerCase()] || '待机'
+}
+
 function show(name: string) {
-  emotion.value = name
-  file.value = map[name] || map['待机'] || ''
+  const normalized = normalizeEmotion(name)
+  emotion.value = normalized
+  file.value = map[normalized] || map['待机'] || ''
 }
 
 const apiBase = resolveApiBase()
+
+// 聊天发消息时由父组件传入临时状态；SSE 仍可用于后端主动推送。
+watch(
+  () => props.state,
+  (name) => {
+    if (name) show(name)
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
   es = new EventSource(

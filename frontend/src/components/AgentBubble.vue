@@ -25,6 +25,15 @@ const emotionSessionId = computed(() => {
 
 const chat = useAgentChatStore()
 
+const avatarEmotion = computed(() => {
+  if (chat.loading) return 'thinking'
+  for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
+    const message = chat.messages[i]
+    if (message.role === 'agent' && message.emotion) return message.emotion
+  }
+  return 'idle'
+})
+
 onMounted(() => {
   chat.ensureSession()
 })
@@ -219,7 +228,7 @@ function delSession(id: string) {
     <template v-if="view === 'chat'">
       <!-- 情绪头像：默认订阅 store 稳定会话，后端经 SSE 推送情绪状态 -->
       <div class="agent-emotion">
-        <EmotionAvatar :session-id="emotionSessionId" :size="120" />
+        <EmotionAvatar :session-id="emotionSessionId" :state="avatarEmotion" :size="120" />
       </div>
       <div class="chat" ref="chatBody">
         <div

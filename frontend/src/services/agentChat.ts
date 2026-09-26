@@ -86,6 +86,7 @@ async function mockResearchResult(ctx: SendContext): Promise<ChatResult> {
   if (!result.papers.length) {
     return {
       reply: `当前演示数据中没有找到与「${topic}」匹配的论文。可以试试 GNN、图神经网络、知识图谱、RAG 或推荐系统。`,
+      emotion: 'confused',
       intent: 'research',
       mode: 'demo',
       backendSessionId: ctx.backendSessionId
@@ -97,6 +98,7 @@ async function mockResearchResult(ctx: SendContext): Promise<ChatResult> {
   })
   return {
     reply: `当前为演示检索结果，围绕「${topic}」找到 ${result.papers.length} 篇论文：\n\n${lines.join('\n')}\n\n这些题目来自内置样例，未访问真实论文源。`,
+    emotion: 'excited',
     intent: 'research',
     papers: result.papers,
     mode: 'demo',
@@ -183,7 +185,12 @@ export async function sendAgentMessage(ctx: SendContext): Promise<ChatResult> {
   if (USE_MOCK) {
     await delay(700)
     if (isResearchRequest(ctx.content)) return await mockResearchResult(ctx)
-    return { reply: mockReply(ctx), mode: 'demo', backendSessionId: ctx.backendSessionId }
+    return {
+      reply: mockReply(ctx),
+      emotion: 'happy',
+      mode: 'demo',
+      backendSessionId: ctx.backendSessionId
+    }
   }
   if (!ctx.token) {
     throw new Error('请先登录后再与智能体对话（真实后端需要账号）')

@@ -137,7 +137,8 @@ export const useAgentChatStore = defineStore('agentChat', () => {
     } catch (e) {
       s.messages.push({
         role: 'agent',
-        text: '（对话出错了，请稍后再试）' + (e instanceof Error ? `：${e.message}` : '')
+        text: '（对话出错了，请稍后再试）' + (e instanceof Error ? `：${e.message}` : ''),
+        emotion: 'confused'
       })
     } finally {
       loading.value = false
