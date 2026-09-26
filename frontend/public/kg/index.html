@@ -260,9 +260,9 @@
    - useMock = true（默认）：使用页面内置样例，保证部署页 / 无后端时也能演示。
    - useMock = false 且 base 非空：调用真实后端 /api/kg/*（需先在主应用登录，
      登录态通过 localStorage['kp-user-v2'] 的 token 自动带入；未登录会回退内置样例）。
-   接真实后端时把下面 base 改成你的后端地址（如 'http://127.0.0.1:8000'）并置 useMock=false。
+   接真实后端时把下面 base 改成你的后端地址（如 'https://strings-wrap-quick-holders.trycloudflare.com'）并置 useMock=false。
 */
-const KG_API = { base: 'http://127.0.0.1:8000', useMock: false };
+const KG_API = { base: 'https://strings-wrap-quick-holders.trycloudflare.com', useMock: false };
 function apiEnabled(){ return !KG_API.useMock && !!KG_API.base; }
 if(apiEnabled()){
   document.getElementById('demoKgNote').classList.add('hidden');
