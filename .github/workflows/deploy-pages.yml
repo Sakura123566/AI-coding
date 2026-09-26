@@ -33,7 +33,7 @@ jobs:
       - run: npm run build
         env:
           VITE_APP_MODE: backend
-          VITE_API_BASE_URL: http://127.0.0.1:8000
+          VITE_API_BASE_URL: https://strings-wrap-quick-holders.trycloudflare.com
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
