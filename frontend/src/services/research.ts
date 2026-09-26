@@ -184,7 +184,8 @@ function normalizeResponse(data: any): ResearchResponse {
 
 export async function fetchResearch(
   keyword: string,
-  limit: number = DEFAULT_LIMIT
+  limit: number = DEFAULT_LIMIT,
+  token: string = ''
 ): Promise<ResearchResponse> {
   if (USE_MOCK) {
     const { mockResearchForTopic } = await import('../mocks/research.mock')
@@ -196,9 +197,13 @@ export async function fetchResearch(
 
   let res: Response
   try {
+    // 必须带上登录态：后端只有在认出用户时才会把这次检索的关键词沉淀进长期图谱。
+    // 以前这里没带 Authorization，于是「搜了很多次，长期图谱一直是空的」。
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
     res = await fetch(`${API_BASE}/api/research/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ keyword, limit })
     })
   } catch {

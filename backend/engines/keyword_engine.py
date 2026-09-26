@@ -304,6 +304,9 @@ def extract_terms(text: str, cfg: Settings | None = None,
 
 
 # ----------------------------- 权重 -----------------------------
+SOURCE_SCORE = {"search": 1.0, "favorite": 1.0, "view": 0.85, "chat": 0.7}
+
+
 def compute_weight(times: int, last_seen_at: str | None, source_type: str, max_times: int) -> float:
     """权重 = 0.45×频率 + 0.35×新鲜度 + 0.20×来源可信度。
 
@@ -313,7 +316,8 @@ def compute_weight(times: int, last_seen_at: str | None, source_type: str, max_t
     freq = math.log(1 + max(0, int(times))) / math.log(1 + mt)
     half_life = max(1.0, settings.memory_half_life_days)
     freshness = 0.5 ** (days_since(last_seen_at or now_iso()) / half_life)
-    source = 1.0 if source_type == "search" else 0.7
+    # 来源可信度：主动检索 / 主动收藏最能代表真实兴趣；点开看过次之；随口提及最弱。
+    source = SOURCE_SCORE.get(source_type, 0.7)
     return round(0.45 * freq + 0.35 * freshness + 0.20 * source, 3)
 
 
@@ -375,8 +379,30 @@ def extract_from_search(user_id: int, event_id: int, keyword: str,
     return record_terms(user_id, terms, "search", f"s{event_id}")
 
 
+def extract_from_paper(user_id: int, item_id: int, title: str, topic: str | None = None,
+                       abstract: str | None = None, source_type: str = "favorite",
+                       cfg: Settings | None = None) -> list[str]:
+    """收藏 / 点开看过一篇论文时，把它的关键词抽进长期记忆图谱。
+
+    收藏和观看以前只存在浏览器里，图谱完全看不见；现在它们和检索、聊天一样
+    都会写进 keywords + keyword_events，长期记忆图谱就能把它们算进去。
+    """
+    cfg = cfg or settings
+    rows = list_keywords(user_id, limit=500, min_times=1, min_weight=0.0)
+    known = {r["term"] for r in rows} | {r["display_term"] for r in rows}
+    terms: list[tuple[str, str]] = []
+    # 收藏时的主题本身就是最明确的兴趣词，直接记一条，不用模型猜
+    if topic:
+        terms.append((topic.strip(), guess_category(topic)))
+    text = " ".join(x for x in (title, abstract or "") if x).strip()
+    if text:
+        terms.extend(extract_terms(text, cfg, known=known)[0])
+    prefix = "f" if source_type == "favorite" else "v"
+    return record_terms(user_id, terms, source_type, f"{prefix}{item_id}")
+
+
 def extract_from_message(user_id: int, message_id: int, text: str,
-                         cfg: Settings | None = None) -> list[str]:
+                          cfg: Settings | None = None) -> list[str]:
     rows = list_keywords(user_id, limit=500, min_times=1, min_weight=0.0)
     known = {r["term"] for r in rows} | {r["display_term"] for r in rows}
     terms, _ = extract_terms(text, cfg or settings, known=known)

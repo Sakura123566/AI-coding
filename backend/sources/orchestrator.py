@@ -202,9 +202,11 @@ class SearchOrchestrator:
         order = [r.name for r in outcome.results if r.ok]
         outcome.papers = merge_source_results({r.name: r.papers for r in outcome.results}, order)[:limit]
         outcome.degraded = bool(outcome.papers) and any(not r.ok for r in outcome.results)
+        # 单个来源失败要让调用方可见：有其它来源成功时仍保留降级告警，便于前端解释结果为何变少。
         for result in outcome.results:
             if not result.ok and result.error:
                 outcome.warnings.append(f"数据源 {result.label} 不可用：{result.error}")
+                log.info("数据源 %s 本次未返回结果：%s", result.label, result.error)
         outcome.from_cache = any(r.from_cache for r in outcome.results)
         return outcome
 
@@ -357,9 +359,11 @@ class SearchOrchestrator:
         order = [r.name for r in outcome.results if r.ok]
         outcome.papers = merge_source_results({r.name: r.papers for r in outcome.results}, order)[:limit]
         outcome.from_cache = any(r.from_cache for r in outcome.results)
+        # 单个来源失败要让调用方可见：有其它来源成功时仍保留降级告警，便于前端解释结果为何变少。
         for result in outcome.results:
             if not result.ok and result.error:
                 outcome.warnings.append(f"数据源 {result.label} 不可用：{result.error}")
+                log.info("数据源 %s 本次未返回结果：%s", result.label, result.error)
         return outcome
 
     # ---- 请求合并 ----

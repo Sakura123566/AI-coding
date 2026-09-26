@@ -14,7 +14,20 @@
       "year": 2017,
       "abstract": "We present a scalable approach for semi-supervised learning on graph-structured data based on an efficient variant of convolutional neural networks which operate directly on graphs.",
       "url": null,
-      "source": "mock"
+      "source": "mock",
+      "doi": null,
+      "arxiv_id": null,
+      "venue": null,
+      "citation_count": null,
+      "published_date": null,
+      "sources": [
+        "mock"
+      ],
+      "title_zh": null,
+      "abstract_zh": null,
+      "abstract_summary_zh": null,
+      "translation_status": "unavailable",
+      "translation_note": "当前为本地样例模式，未调用翻译模型。"
     },
     {
       "id": "P2",
@@ -26,7 +39,20 @@
       "year": 2017,
       "abstract": "We propose GraphSAGE, a general inductive framework that leverages node feature information to efficiently generate node embeddings for previously unseen data.",
       "url": null,
-      "source": "mock"
+      "source": "mock",
+      "doi": null,
+      "arxiv_id": null,
+      "venue": null,
+      "citation_count": null,
+      "published_date": null,
+      "sources": [
+        "mock"
+      ],
+      "title_zh": null,
+      "abstract_zh": null,
+      "abstract_summary_zh": null,
+      "translation_status": "unavailable",
+      "translation_note": "当前为本地样例模式，未调用翻译模型。"
     },
     {
       "id": "P3",
@@ -38,7 +64,20 @@
       "year": 2018,
       "abstract": "We introduce attention-based neighborhood aggregation for graphs, enabling different weights to different nodes without expensive matrix operations.",
       "url": null,
-      "source": "mock"
+      "source": "mock",
+      "doi": null,
+      "arxiv_id": null,
+      "venue": null,
+      "citation_count": null,
+      "published_date": null,
+      "sources": [
+        "mock"
+      ],
+      "title_zh": null,
+      "abstract_zh": null,
+      "abstract_summary_zh": null,
+      "translation_status": "unavailable",
+      "translation_note": "当前为本地样例模式，未调用翻译模型。"
     },
     {
       "id": "P4",
@@ -49,7 +88,20 @@
       "year": 2023,
       "abstract": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
       "url": null,
-      "source": "mock"
+      "source": "mock",
+      "doi": null,
+      "arxiv_id": null,
+      "venue": null,
+      "citation_count": null,
+      "published_date": null,
+      "sources": [
+        "mock"
+      ],
+      "title_zh": null,
+      "abstract_zh": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
+      "abstract_summary_zh": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
+      "translation_status": "original_chinese",
+      "translation_note": "原文摘要已经是中文。"
     },
     {
       "id": "P5",
@@ -60,7 +112,20 @@
       "year": 2023,
       "abstract": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
       "url": null,
-      "source": "mock"
+      "source": "mock",
+      "doi": null,
+      "arxiv_id": null,
+      "venue": null,
+      "citation_count": null,
+      "published_date": null,
+      "sources": [
+        "mock"
+      ],
+      "title_zh": null,
+      "abstract_zh": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
+      "abstract_summary_zh": "这是关键词“Graph Neural Networks”的本地样例条目，用于前端联调与演示。真实数据请把 PAPER_SOURCE 切到 arxiv / semanticscholar / crossref / mcp。",
+      "translation_status": "original_chinese",
+      "translation_note": "原文摘要已经是中文。"
     }
   ],
   "report": {
@@ -129,6 +194,7 @@
   },
   "report_error": null,
   "warnings": [
+    "当前未配置翻译模型，论文摘要保留英文原文。",
     "当前为本地样例报告（LLM_PROVIDER=mock），并非模型真实产出。"
   ],
   "message": null

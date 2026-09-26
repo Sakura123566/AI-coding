@@ -104,11 +104,12 @@ export const useAgentChatStore = defineStore('agentChat', () => {
 
   async function send(text: string) {
     const s = ensureSession()
+    const userStore = useUserStore()
     s.messages.push({ role: 'user', text })
     s.updatedAt = Date.now()
+
     loading.value = true
     try {
-      const userStore = useUserStore()
       const agent = useAgentSettings()
       const settings = agent.state.settings
       const addressName =
@@ -117,6 +118,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
         ''
       const res = await sendAgentMessage({
         token: userStore.token || null,
+        sessionId: s.id,
         backendSessionId: s.backendSessionId ?? null,
         content: text,
         settings,

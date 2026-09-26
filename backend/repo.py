@@ -640,6 +640,129 @@ def user_between(user_id: int, start: str, end: str) -> dict[str, Any]:
     )
     return {"searches": searches, "messages": messages, "memories": memories, "keywords": keywords}
 
+# ----------------------------- 收藏 / 观看（论文级兴趣信号） -----------------------------
+def paper_key(paper: dict[str, Any]) -> str:
+    """论文唯一键：有 url 就用 url（最稳），否则退回归一化标题。
+
+    前端 localStorage 里的 key 是 paper.id（P1/P2 这种，每次检索都重新编号），
+    不能直接拿来做跨设备唯一键，所以这里一律自己算。
+    """
+    url = str(paper.get("url") or "").strip()
+    if url:
+        return url
+    title = str(paper.get("title_original") or paper.get("title") or "").strip().casefold()
+    return "title:" + "".join(ch for ch in title if ch.isalnum())[:120]
+
+
+def _paper_fields(paper: dict[str, Any]) -> dict[str, Any]:
+    authors = paper.get("authors") or []
+    if not isinstance(authors, list):
+        authors = []
+    return {
+        "title": str(paper.get("title") or paper.get("title_original") or "").strip()[:300],
+        "title_original": str(paper.get("title_original") or paper.get("title") or "").strip()[:300],
+        "year": int(paper["year"]) if isinstance(paper.get("year"), int) else None,
+        "source": str(paper.get("source") or "").strip()[:40],
+        "url": str(paper.get("url") or "").strip()[:500],
+        "authors_json": json.dumps([str(a)[:80] for a in authors[:20]], ensure_ascii=False),
+        "abstract": str(paper.get("abstract") or "").strip()[:1500],
+        "topic": str(paper.get("topic") or "").strip()[:200],
+    }
+
+
+def upsert_favorite(user_id: int, paper: dict[str, Any], topic: str | None = None) -> dict[str, Any]:
+    """收藏一篇论文：已收藏就刷新信息（幂等），返回这一行。"""
+    key = paper_key(paper)
+    f = _paper_fields(paper)
+    topic = (topic or f["topic"] or "").strip()[:200]
+    ts = now_iso()
+    row = query_one("SELECT * FROM paper_favorites WHERE user_id = ? AND paper_key = ?", (user_id, key))
+    if row is None:
+        execute(
+            "INSERT INTO paper_favorites(user_id, paper_key, title, title_original, year, source, url,"
+            " authors_json, abstract, topic, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (user_id, key, f["title"], f["title_original"], f["year"], f["source"], f["url"],
+             f["authors_json"], f["abstract"], topic, ts),
+        )
+    else:
+        execute(
+            "UPDATE paper_favorites SET title=?, title_original=?, year=?, source=?, url=?,"
+            " authors_json=?, abstract=?, topic=? WHERE id=?",
+            (f["title"], f["title_original"], f["year"], f["source"], f["url"],
+             f["authors_json"], f["abstract"], topic or row["topic"], int(row["id"])),
+        )
+    return get_favorite(user_id, key) or {}
+
+
+def get_favorite(user_id: int, paper_key: str) -> dict[str, Any] | None:
+    return query_one("SELECT * FROM paper_favorites WHERE user_id = ? AND paper_key = ?",
+                     (user_id, paper_key))
+
+
+def list_favorites(user_id: int, limit: int = 200) -> list[dict[str, Any]]:
+    return query(
+        "SELECT * FROM paper_favorites WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+        (user_id, max(1, min(limit, 500))),
+    )
+
+
+def delete_favorite(user_id: int, paper_key: str) -> bool:
+    row = get_favorite(user_id, paper_key)
+    if row is None:
+        return False
+    execute("DELETE FROM paper_favorites WHERE user_id = ? AND paper_key = ?", (user_id, paper_key))
+    return True
+
+
+def clear_favorites(user_id: int) -> int:
+    row = query_one("SELECT COUNT(*) AS n FROM paper_favorites WHERE user_id = ?", (user_id,))
+    execute("DELETE FROM paper_favorites WHERE user_id = ?", (user_id,))
+    return int((row or {}).get("n", 0))
+
+
+def record_view(user_id: int, paper: dict[str, Any], topic: str | None = None) -> dict[str, Any]:
+    """记一次「点开看过」：同篇累加次数，不重复插行。"""
+    key = paper_key(paper)
+    f = _paper_fields(paper)
+    topic = (topic or f["topic"] or "").strip()[:200]
+    ts = now_iso()
+    row = query_one("SELECT * FROM paper_views WHERE user_id = ? AND paper_key = ?", (user_id, key))
+    if row is None:
+        execute(
+            "INSERT INTO paper_views(user_id, paper_key, title, title_original, year, source, url,"
+            " authors_json, topic, view_count, created_at, last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,1,?,?)",
+            (user_id, key, f["title"], f["title_original"], f["year"], f["source"], f["url"],
+             f["authors_json"], topic, ts, ts),
+        )
+    else:
+        execute(
+            "UPDATE paper_views SET view_count = view_count + 1, last_seen_at = ?, title = ?,"
+            " title_original = ?, year = ?, source = ?, url = ?, topic = ? WHERE id = ?",
+            (ts, f["title"], f["title_original"], f["year"], f["source"], f["url"],
+             topic or row["topic"], int(row["id"])),
+        )
+    return query_one("SELECT * FROM paper_views WHERE user_id = ? AND paper_key = ?", (user_id, key)) or {}
+
+
+def list_views(user_id: int, limit: int = 200) -> list[dict[str, Any]]:
+    return query(
+        "SELECT * FROM paper_views WHERE user_id = ? ORDER BY last_seen_at DESC LIMIT ?",
+        (user_id, max(1, min(limit, 500))),
+    )
+
+
+def clear_views(user_id: int) -> int:
+    row = query_one("SELECT COUNT(*) AS n FROM paper_views WHERE user_id = ?", (user_id,))
+    execute("DELETE FROM paper_views WHERE user_id = ?", (user_id,))
+    return int((row or {}).get("n", 0))
+
+
+def count_marks(user_id: int) -> dict[str, int]:
+    fav = query_one("SELECT COUNT(*) AS n FROM paper_favorites WHERE user_id = ?", (user_id,))
+    view = query_one("SELECT COUNT(*) AS n FROM paper_views WHERE user_id = ?", (user_id,))
+    return {"favorites": int((fav or {}).get("n", 0)), "views": int((view or {}).get("n", 0))}
+
+
 def sync_identity_memories(user_id: int, user: dict[str, Any]) -> None:
     """资料变化时替换旧身份记忆，避免同时记得两个姓名或年龄。"""
     execute(

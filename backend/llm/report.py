@@ -39,6 +39,7 @@ def build_report(keyword: str, papers: list[dict[str, Any]], cfg: Settings) -> d
                 temperature=cfg.llm_temperature,
                 timeout=cfg.llm_timeout,
                 json_mode=cfg.llm_json_mode,
+                max_tokens=3000,
             )
         except LLMError as e:
             raise ReportError(str(e)) from e

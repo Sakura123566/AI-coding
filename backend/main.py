@@ -26,7 +26,9 @@ from .errors import ApiError
 from .logging_setup import get_logger, request_id, setup_logging
 from .pipeline import run_research
 from .repo import add_search_event
-from .routers import agent_api, auth_api, chat_api, kg_api, memory_api, profile_api, reports_api
+from .routers import (agent_api, agent_chat, auth_api, chat_api, kg_api, kg_article, kg_ask,
+                      kg_expand, kg_explain, kg_papers, kg_timeline, memory_api, profile_api,
+                      reports_api)
 from .schemas import (
     ERROR_CODES,
     MAX_KEYWORD_LEN,
@@ -73,8 +75,10 @@ app = FastAPI(
 )
 
 for _router in (auth_api.router, chat_api.router, memory_api.router,
-                profile_api.router, kg_api.router, agent_api.router, reports_api.router,
-                emotion_router):
+                profile_api.router, kg_api.router, kg_ask.router, kg_expand.router,
+                kg_timeline.router, kg_papers.router, kg_explain.router, kg_article.router,
+                agent_api.router, agent_chat.router,
+                reports_api.router, emotion_router):
     app.include_router(_router)
 
 app.add_middleware(

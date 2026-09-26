@@ -24,6 +24,7 @@ import ResearchReport from './components/ResearchReport.vue'
 import AgentBubble from './components/AgentBubble.vue'
 import FavoritesView from './components/FavoritesView.vue'
 import HistoryView from './components/HistoryView.vue'
+import KnowledgeGraphView from './components/KnowledgeGraphView.vue'
 import { useResearch } from './composables/useResearch'
 import { useKpStore, type KpMode } from './stores/knowledgeParty'
 import { useUserStore } from './stores/user'
@@ -46,6 +47,16 @@ watch(
   () => userStore.token,
   (t) => {
     if (t) agentSettings.load(t)
+  },
+  { immediate: true }
+)
+
+// 登录后：把浏览器本地攒的收藏 / 观看记录补到后端，
+// 这样长期记忆图谱才会把它们算进去（换设备也不丢）。
+watch(
+  () => userStore.token,
+  (t) => {
+    if (t) void store.syncFavoritesNow()
   },
   { immediate: true }
 )
@@ -180,18 +191,10 @@ function onSearch() {
   submit()
 }
 
-// 「图谱」：点击后打开独立的 29f5 知识图谱网页（/kg/index.html，与线上 29f5 1:1 克隆）
-function openKnowledgeGraphPage() {
-  const base = import.meta.env.BASE_URL || '/'
-  const url = `${base.replace(/\/$/, '')}/kg/index.html`
-  window.open(url, '_blank', 'noopener')
-}
+// 「图谱」不再弹出新网页：直接把模式切成 graph，图谱作为应用内的一页打开，
+// 页面顶部有「返回首页」按钮（见 KnowledgeGraphView.vue）。
 function onNav(item: { key: KpMode; label: string; icon: any }) {
-  if (item.key === 'graph') {
-    openKnowledgeGraphPage()
-  } else {
-    store.setMode(item.key)
-  }
+  store.setMode(item.key)
 }
 function onSelect(t: string) {
   store.setMode('search') // 点历史记录自动切回搜索界面，无需手动切换
@@ -239,6 +242,18 @@ async function createSpace() {
     })
     const name = (value ?? '').trim()
     if (name) store.addSpace(name)
+  } catch {
+    /* 用户取消 */
+  }
+}
+async function removeSpace(s: { id: string; name: string }) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除空间「${s.name}」吗？该空间下的收藏夹会一并移除；搜索记录是全局的，不受影响。`,
+      '删除空间',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    store.removeSpace(s.id)
   } catch {
     /* 用户取消 */
   }
@@ -297,7 +312,17 @@ async function createSpace() {
                 v-for="s in store.spaces"
                 :key="s.id"
                 :command="{ type: 'switch', id: s.id }"
-              >{{ s.name }}</el-dropdown-item>
+              >
+                <span class="sp-item">
+                  <span class="sp-name">{{ s.name }}</span>
+                  <span
+                    v-if="store.spaces.length > 1"
+                    class="sp-del"
+                    title="删除该空间"
+                    @click.stop="removeSpace(s)"
+                  >✕</span>
+                </span>
+              </el-dropdown-item>
               <el-dropdown-item command="add" divided>+ 新建空间</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -341,7 +366,7 @@ async function createSpace() {
     </aside>
 
     <!-- 中栏：按模式切换的视图（搜索 / 收藏 / 历史 / 图谱） -->
-    <main class="content">
+    <main class="content" :class="{ 'content-graph': store.mode === 'graph' }">
       <template v-if="store.mode === 'search'">
         <div class="search-panel" :class="{ centered: !store.searched }">
           <div class="search-header">
@@ -409,10 +434,12 @@ async function createSpace() {
 
       <FavoritesView v-else-if="store.mode === 'favorites'" />
       <HistoryView v-else-if="store.mode === 'history'" />
+      <KnowledgeGraphView v-else-if="store.mode === 'graph'" />
     </main>
 
     <!-- 右栏：方向概览（研究导航报告），可拖宽、可收起、可放大整页 -->
     <aside
+      v-show="store.mode !== 'graph'"
       class="right-panel"
       :class="{ collapsed: rightCollapsed, maximized: rightMaximized }"
       :style="rightStyle"
@@ -580,6 +607,11 @@ async function createSpace() {
   padding: 32px 40px;
   background: #f7f8fa;
   box-sizing: border-box;
+}
+/* 图谱页要把整块区域占满，所以去掉中栏的内边距和滚动 */
+.content-graph {
+  padding: 0;
+  overflow: hidden;
 }
 .search-panel {
   display: flex;
@@ -792,6 +824,29 @@ async function createSpace() {
   cursor: pointer;
   border-radius: 6px;
   font-size: 14px;
+}
+/* 空间下拉：右侧删除按钮 */
+.sp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.sp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-del {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 0 2px;
+  opacity: 0.45;
+}
+.sp-del:hover {
+  opacity: 1;
+  color: #e24b4a;
 }
 </style>
 

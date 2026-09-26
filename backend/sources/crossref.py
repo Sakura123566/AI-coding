@@ -86,6 +86,9 @@ def search_papers(keyword: str, limit: int, timeout: int = 15,
                 venue=venue,
                 citation_count=item.get("is-referenced-by-count"),
                 sources=[SOURCE_LABEL],
+                # 把 Crossref 的条目类型带上：它混着大量 "book-chapter"、会议摘要这类
+                # 只有标题、没有摘要的记录，后面按质量排序时要据此降权。
+                extra={"type": str(item.get("type") or "").strip().lower()},
             )
         )
         if len(papers) >= limit:

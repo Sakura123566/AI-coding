@@ -48,8 +48,13 @@ def call_json(
     temperature: float = 0.2,
     timeout: int | None = None,
     retries: int = 1,
+    max_tokens: int | None = 2048,
 ) -> dict[str, Any]:
-    """调一次模型并解析成 dict；失败抛 LLMJsonError。mock 模式下直接抛，调用方走规则兜底。"""
+    """调一次模型并解析成 dict；失败抛 LLMJsonError。mock 模式下直接抛，调用方走规则兜底。
+
+    max_tokens 默认 2048：这些调用的产物都是结构固定的 JSON，限住长度能明显缩短生成时间。
+    需要长输出的调用方（时间线、文章解析、摘要翻译）自己传更大的值。
+    """
     if not llm_ready(cfg):
         raise LLMJsonError("未接入真实模型（LLM_PROVIDER=mock 或缺少 LLM_API_KEY）")
 
@@ -65,6 +70,7 @@ def call_json(
                 temperature=temperature,
                 timeout=timeout or min(cfg.llm_timeout, 45),
                 json_mode=cfg.llm_json_mode,
+                max_tokens=max_tokens,
             )
         except LLMError as e:
             raise LLMJsonError(str(e)) from e

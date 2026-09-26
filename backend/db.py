@@ -185,6 +185,44 @@ CREATE TABLE IF NOT EXISTS weekly_reports (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_reports_unique ON weekly_reports(user_id, week_start);
 
+-- 收藏的论文：以前只存在浏览器 localStorage，换设备/清缓存就没了，
+-- 长期记忆图谱也就看不到它们。落库后，收藏 = 最明确的兴趣信号，能直接进图谱。
+CREATE TABLE IF NOT EXISTS paper_favorites (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  paper_key      TEXT    NOT NULL,   -- 论文唯一键：有 url 用 url，否则用归一化标题
+  title          TEXT    NOT NULL,
+  title_original TEXT,
+  year           INTEGER,
+  source         TEXT,
+  url            TEXT,
+  authors_json   TEXT    NOT NULL DEFAULT '[]',
+  abstract       TEXT,
+  topic          TEXT,               -- 收藏时正在搜的主题
+  created_at     TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fav_unique ON paper_favorites(user_id, paper_key);
+CREATE INDEX IF NOT EXISTS idx_fav_user ON paper_favorites(user_id, created_at);
+
+-- 点进去看过的论文：比收藏弱一点的兴趣信号，但"看过"这件事本身很有信息量
+CREATE TABLE IF NOT EXISTS paper_views (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  paper_key      TEXT    NOT NULL,
+  title          TEXT    NOT NULL,
+  title_original TEXT,
+  year           INTEGER,
+  source         TEXT,
+  url            TEXT,
+  authors_json   TEXT    NOT NULL DEFAULT '[]',
+  topic          TEXT,
+  view_count     INTEGER NOT NULL DEFAULT 1,
+  created_at     TEXT    NOT NULL,
+  last_seen_at   TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_view_unique ON paper_views(user_id, paper_key);
+CREATE INDEX IF NOT EXISTS idx_view_user ON paper_views(user_id, last_seen_at);
+
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL

@@ -5,14 +5,32 @@ import { useAgentChatStore } from '@/stores/agentChat'
 import EmotionAvatar from '@/components/emotion/EmotionAvatar.vue'
 import { useSpeech } from '@/composables/useSpeech'
 import { useAgentSettings } from '@/composables/useAgentSettings'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 // 智能体入口：右下角紧凑启动按钮（不挡视线）；对话时聊天框标题头像带小动画。
 // 具体对话能力由后端提供（多轮 + 历史本地持久化，见 stores/agentChat）。
 const chatOpen = ref(false)
 const chatPos = ref({ x: 0, y: 0 })
 
-const CHAT_W = 330
-const CHAT_H = 460
+// 聊天窗尺寸：可在右下角拖拽改变
+const CHAT_W_MIN = 300
+const CHAT_H_MIN = 320
+const chatW = ref(330)
+const chatH = ref(460)
+
+// 智能体输出是模型生成的富文本：先转 markdown，再经 DOMPurify 清洗后才允许渲染（防 XSS）
+function md(src: string): string {
+  try {
+    const html = marked.parse(src || '', { async: false }) as unknown as string
+    return DOMPurify.sanitize(html)
+  } catch {
+    // 兜底：纯文本转义，绝不裸插 HTML
+    return String(src || '').replace(/[<>&]/g, (c) =>
+      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] as string
+    )
+  }
+}
 
 // 情绪头像：用 store 的稳定会话 id（可经 URL ?emotionSession= 覆盖，便于后端联调）
 const store = useKpStore()
@@ -41,10 +59,19 @@ onMounted(() => {
 function openChat() {
   if (chatOpen.value) return
   chatOpen.value = true
-  // 默认出现在右下角、启动按钮左上方，避免超出视口
+  // 跟随「启动按钮当前所在位置」展开（按钮拖到哪就从哪展开），并夹在视口内避免贴边/出界
+  const lx = launcherPos.value.x
+  const ly = launcherPos.value.y
+  const maxX = Math.max(8, window.innerWidth - chatW.value - 8)
+  const maxY = Math.max(8, window.innerHeight - chatH.value - 8)
+  // 优先向左上方展开；左边空间不够时改为向右展开
+  let x = lx + 52 - chatW.value
+  if (x < 8) x = Math.min(lx, maxX)
+  let y = ly + 52 - chatH.value
+  if (y < 8) y = Math.min(ly, maxY)
   chatPos.value = {
-    x: Math.max(8, window.innerWidth - CHAT_W - 16),
-    y: Math.max(8, window.innerHeight - CHAT_H - 72)
+    x: Math.max(8, Math.min(maxX, x)),
+    y: Math.max(8, Math.min(maxY, y))
   }
 }
 function closeChat() {
@@ -104,13 +131,34 @@ function onChatMove(e: MouseEvent) {
   const dx = e.clientX - cstart.x
   const dy = e.clientY - cstart.y
   chatPos.value = {
-    x: Math.max(8, Math.min(window.innerWidth - CHAT_W - 8, cstart.px + dx)),
-    y: Math.max(8, Math.min(window.innerHeight - CHAT_H - 8, cstart.py + dy))
+    x: Math.max(8, Math.min(window.innerWidth - chatW.value - 8, cstart.px + dx)),
+    y: Math.max(8, Math.min(window.innerHeight - chatH.value - 8, cstart.py + dy))
   }
 }
 function onChatUp() {
   window.removeEventListener('mousemove', onChatMove)
   window.removeEventListener('mouseup', onChatUp)
+  document.body.style.userSelect = ''
+}
+
+// —— 聊天窗右下角拖拽改大小（判定范围放大到 26px，容易抓住）——
+let rstart = { x: 0, y: 0, w: 0, h: 0 }
+function onResizeDown(e: MouseEvent) {
+  e.stopPropagation()
+  rstart = { x: e.clientX, y: e.clientY, w: chatW.value, h: chatH.value }
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', onResizeUp)
+  document.body.style.userSelect = 'none'
+}
+function onResizeMove(e: MouseEvent) {
+  const maxW = Math.max(CHAT_W_MIN, window.innerWidth - chatPos.value.x - 8)
+  const maxH = Math.max(CHAT_H_MIN, window.innerHeight - chatPos.value.y - 8)
+  chatW.value = Math.max(CHAT_W_MIN, Math.min(maxW, rstart.w + (e.clientX - rstart.x)))
+  chatH.value = Math.max(CHAT_H_MIN, Math.min(maxH, rstart.h + (e.clientY - rstart.y)))
+}
+function onResizeUp() {
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', onResizeUp)
   document.body.style.userSelect = ''
 }
 
@@ -192,7 +240,7 @@ function delSession(id: string) {
   <div
     v-if="chatOpen"
     class="agent-chat"
-    :style="{ left: chatPos.x + 'px', top: chatPos.y + 'px', width: CHAT_W + 'px' }"
+    :style="{ left: chatPos.x + 'px', top: chatPos.y + 'px', width: chatW + 'px', height: chatH + 'px' }"
   >
     <div class="agent-chat-head" @mousedown="onChatDown">
       <span class="agent-chat-avatar" :class="{ thinking: chat.loading }">🤖</span>
@@ -239,7 +287,8 @@ function delSession(id: string) {
         >
           <div class="chat-avatar">{{ m.role === 'agent' ? '🤖' : '🧑' }}</div>
           <div class="chat-bubble">
-            <span class="cb-text">{{ m.text }}</span>
+            <!-- 智能体输出按 markdown 渲染：先转 HTML 再过 DOMPurify（见 md()） -->
+            <span class="cb-text" v-html="md(m.text)"></span>
             <button
               v-if="m.role === 'agent'"
               class="cb-speak"
@@ -289,6 +338,9 @@ function delSession(id: string) {
         </div>
       </div>
     </template>
+
+    <!-- 右下角拖拽改大小（判定范围放大到 26px，容易抓住） -->
+    <div class="chat-resize" title="拖动调整窗口大小" @mousedown="onResizeDown"></div>
   </div>
 </template>
 
@@ -334,7 +386,7 @@ function delSession(id: string) {
 .agent-chat {
   position: fixed;
   z-index: 56;
-  height: 460px;
+  /* 宽高由右下角拖拽决定（内联样式），这里不再写死 */
   max-height: calc(100vh - 24px);
   background: #fff;
   border: 1px solid #e3e6eb;
@@ -343,6 +395,30 @@ function delSession(id: string) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+/* 右下角拖拽改大小：可见角标约 10px，实际判定范围 26px（更好抓） */
+.chat-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 26px;
+  height: 26px;
+  cursor: nwse-resize;
+  z-index: 3;
+}
+.chat-resize::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #b9c2d0;
+  border-bottom: 2px solid #b9c2d0;
+  border-bottom-right-radius: 3px;
+}
+.chat-resize:hover::after {
+  border-color: #2b6cff;
 }
 .agent-chat-head {
   display: flex;
@@ -507,7 +583,10 @@ function delSession(id: string) {
   flex: 0 0 auto;
 }
 .chat-bubble {
-  max-width: 230px;
+  /* 以前写死 230px：把窗口拖宽以后气泡还是窄窄一条，大屏也用不上。
+     改成跟随窗口按比例撑开，窗口拖大气泡就跟着变大。 */
+  max-width: 84%;
+  min-width: 0;
   padding: 8px 12px;
   border-radius: 12px;
   font-size: 13px;
@@ -521,7 +600,67 @@ function delSession(id: string) {
 }
 .cb-text {
   flex: 1 1 auto;
-  white-space: pre-wrap;
+  min-width: 0;
+  word-break: break-word;
+}
+/* markdown 渲染后的排版：段落空行、列表、代码、引用 */
+.cb-text > :first-child {
+  margin-top: 0;
+}
+.cb-text > :last-child {
+  margin-bottom: 0;
+}
+.cb-text p {
+  margin: 0 0 8px;
+  line-height: 1.7;
+}
+.cb-text strong {
+  font-weight: 600;
+}
+.cb-text ul,
+.cb-text ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.cb-text li {
+  margin: 2px 0;
+}
+.cb-text code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(20, 30, 60, 0.08);
+  font-size: 12px;
+}
+.cb-text pre {
+  margin: 0 0 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(20, 30, 60, 0.06);
+  overflow-x: auto;
+}
+.cb-text pre code {
+  background: transparent;
+  padding: 0;
+}
+.cb-text blockquote {
+  margin: 0 0 8px;
+  padding-left: 8px;
+  border-left: 3px solid rgba(20, 30, 60, 0.18);
+  color: #5a6b8c;
+}
+.cb-text a {
+  color: inherit;
+  text-decoration: underline;
+}
+.cb-text table {
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.cb-text th,
+.cb-text td {
+  border: 1px solid rgba(20, 30, 60, 0.15);
+  padding: 3px 6px;
 }
 .cb-speak {
   flex: 0 0 auto;

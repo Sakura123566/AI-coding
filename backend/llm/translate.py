@@ -15,6 +15,9 @@ from .client import LLMError, chat_completions
 
 CJK = re.compile(r"[\u4e00-\u9fff]")
 
+# 模型翻译结果的进程内缓存：同一个中文主题不重复翻（重搜时直接省掉这一步）
+_MODEL_CACHE: dict[str, str] = {}
+
 # 常见科研方向的中英对照（示例主题和高频词先写死，保证演示零延迟）
 KEYWORD_MAP = {
     "gnn": "graph neural networks",
@@ -71,9 +74,16 @@ def match_map(keyword: str) -> tuple[str | None, str | None]:
 
 
 def via_model(keyword: str, cfg: Any) -> str | None:
-    """用大模型把中文主题翻成英文检索词；失败返回 None，绝不硬撑。"""
+    """用大模型把中文主题翻成英文检索词；失败返回 None，绝不硬撑。
+
+    同一个主题只翻一次：进程内缓存。翻译本身只有 1 秒左右，但它是串在检索前面的，
+    重复搜同一个主题时省下的就是用户实打实的等待。
+    """
     if cfg.llm_provider != "openai" or not cfg.llm_api_key:
         return None
+    cache_key = (keyword or "").strip().lower()
+    if cache_key in _MODEL_CACHE:
+        return _MODEL_CACHE[cache_key]
     messages = [
         {
             "role": "system",
@@ -96,7 +106,12 @@ def via_model(keyword: str, cfg: Any) -> str | None:
         return None
     out = re.sub(r"[\"'`\n\r]", "", text).strip()
     # 翻译结果里还带中文说明放弃
-    return out if out and not has_cjk(out) else None
+    out = out if out and not has_cjk(out) else None
+    if out:
+        if len(_MODEL_CACHE) > 500:
+            _MODEL_CACHE.clear()
+        _MODEL_CACHE[cache_key] = out
+    return out
 
 
 def resolve(keyword: str, cfg: Any) -> tuple[str, str | None]:

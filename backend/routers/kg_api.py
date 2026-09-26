@@ -11,13 +11,19 @@ from ..db import now_iso, query_one
 from ..engines.keyword_engine import recompute_weights
 from ..engines.knowledge_graph import analyze_node, build_map, node_detail
 from ..errors import ok
+from ..logging_setup import get_logger
 from ..repo import (
     clear_knowledge_graph,
     cooccurrence_pairs,
+    count_marks,
     delete_knowledge_node,
     keyword_sources,
+    list_favorites,
     list_keywords,
+    list_views,
 )
+
+log = get_logger("kg_api")
 
 router = APIRouter(prefix="/api/kg", tags=["长期知识图谱"])
 
@@ -85,10 +91,32 @@ def cooccurrence(limit: int = Query(1000, ge=1, le=1000),
     return ok(user_id=user_id, count=len(pairs), pairs=pairs)
 
 
+def _short_paper(row: dict[str, Any]) -> dict[str, Any]:
+    """图谱里只需要论文的四项信息，别把整篇摘要搬给前端。"""
+    return {
+        "title": row.get("title"),
+        "year": row.get("year"),
+        "url": row.get("url"),
+        "topic": row.get("topic"),
+    }
+
+
 @router.get("/map", summary="长期记忆知识图谱")
 def graph_map(limit: int = Query(300, ge=1, le=1000),
               user_id: int = Depends(current_user_id)) -> dict[str, Any]:
     data = build_map(user_id, limit=limit)
+    # 长期记忆图谱要能体现「收藏过 / 点开看过」：这些论文的关键词已经在 build_map 里
+    # 变成节点了，这里再带一份计数和最近几篇，方便前端核对与展示。
+    try:
+        counts = count_marks(user_id)
+        data["marks"] = {
+            "favorites": counts["favorites"],
+            "views": counts["views"],
+            "recent_favorites": [_short_paper(r) for r in list_favorites(user_id, limit=8)],
+            "recent_views": [_short_paper(r) for r in list_views(user_id, limit=8)],
+        }
+    except Exception as exc:  # noqa: BLE001 - 展示用的附加信息失败不能拖垮整张图
+        log.warning("读取收藏/观看摘要失败（不影响图谱）：%s", exc)
     return ok(**data)
 
 

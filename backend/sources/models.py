@@ -273,9 +273,67 @@ def dedupe_papers(papers: Iterable[Paper]) -> list[Paper]:
     return merged + orphans
 
 
+def _quality_score(p: Paper) -> float:
+    """论文的"信息量"打分：用来把有摘要、有作者、有出处的排到前面。"""
+    score = 0.0
+    abstract = (p.abstract or "").strip()
+    if len(abstract) >= 300:
+        score += 3.2
+    elif len(abstract) >= 60:
+        score += 2.6
+    elif abstract:
+        score += 1.0
+    if p.authors:
+        score += 1.2
+    if p.year:
+        score += 0.4
+    if p.doi or p.arxiv_id:
+        score += 0.4
+    if p.venue:
+        score += 0.3
+    if p.citation_count:
+        score += min(2.0, float(p.citation_count) / 50.0)
+    # 非正式论文类型降权（Crossref 里大量 book-chapter / 会议摘要，基本没有摘要）
+    kind = str((p.extra or {}).get("type") or "")
+    if kind in ("book-chapter", "book", "component", "dataset", "posted-content", "proceedings-article"):
+        score -= 1.6
+    return score
+
+
+def is_thin_paper(p: Paper) -> bool:
+    """「空壳论文」：既没有摘要、又没有作者 —— 点进去什么都没有。
+
+    用户明确反馈过这类记录（标题只有一句话、摘要"暂无"、作者"作者未知"）不要列进来。
+    标题本身空缺/过短的也算。
+    """
+    title = (p.title or "").strip()
+    if title in ("", "(无标题)") or len(title) < 8:
+        return True
+    has_abstract = len((p.abstract or "").strip()) >= 60
+    has_authors = bool(p.authors)
+    return not has_abstract and not has_authors
+
+
+def order_by_quality(papers: Iterable[Paper]) -> list[Paper]:
+    """把"信息完整"的论文排前面，空壳论文沉到最后。
+
+    用"分区 + 排序"而不是"直接删掉"：万一某个主题所有源都只给了标题，
+    列表也不会变空，只是质量差的那几篇排在后面。
+    排序是稳定的，所以同分时仍然保持数据源本来的优先级。
+    """
+    good: list[Paper] = []
+    thin: list[Paper] = []
+    for p in papers:
+        (thin if is_thin_paper(p) else good).append(p)
+    good.sort(key=_quality_score, reverse=True)
+    thin.sort(key=_quality_score, reverse=True)
+    return good + thin
+
+
 def merge_source_results(results: dict[str, list[Paper]], order: list[str]) -> list[Paper]:
-    """按数据源顺序合并，保证"谁先返回、谁优先"是确定的。"""
+    """按数据源顺序合并，再按"信息量"重排：保证"谁先返回、谁优先"是确定的，
+    同时把只有标题的空壳记录压到列表末尾（截断时自然被丢掉）。"""
     flat: list[Paper] = []
     for name in order:
         flat.extend(results.get(name) or [])
-    return dedupe_papers(flat)
+    return order_by_quality(dedupe_papers(flat))

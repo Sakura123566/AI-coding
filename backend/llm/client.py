@@ -24,6 +24,7 @@ def chat_completions(
     temperature: float = 0.3,
     timeout: int = 90,
     json_mode: bool = True,
+    max_tokens: int | None = None,
 ) -> str:
     if not api_key:
         raise LLMError("未配置 LLM_API_KEY，请先在 .env 中填入密钥")
@@ -36,6 +37,10 @@ def chat_completions(
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
+    # 限住输出长度：这几处调用的产物都是结构固定的短 JSON，
+    # 不限的话模型会自由发挥，生成时间被白白拉长（这是之前"生成慢"的一个主要原因）。
+    if max_tokens and max_tokens > 0:
+        payload["max_tokens"] = int(max_tokens)
 
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(

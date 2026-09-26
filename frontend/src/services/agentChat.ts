@@ -4,16 +4,11 @@ import { apiBase, isDemoMode } from '../config/runtime'
 // 用规则式回复演示「多轮上下文 + 长期记忆（知道你是谁、记得上一轮）」；
 // 后端就绪后把 VITE_APP_MODE 设为 backend，即可对接真实会话接口（契约见下）。
 //
-// 约定端点（真实后端，backend/routers/chat_api.py，前缀 /api/chat，需 Bearer 登录）：
-//   POST /api/chat/sessions            (Bearer, {title?}) -> ok(session={id,title,...})
-//   POST /api/chat/message             (Bearer, {session_id, content}) -> ok(reply, emotion, intent, papers, ...)
-//   GET  /api/chat/sessions            (Bearer) -> ok(sessions, count)
-//   DELETE /api/chat/sessions/{id}     (Bearer) -> ok(deleted)
-//   POST /api/chat/sessions/{id}/close (Bearer) -> ok(...)  // 触发长期记忆抽取
+// 真实端点（backend/routers/agent_chat.py，前缀 /api/agent；无需登录，已登录会自动带 Bearer）：
+//   POST /api/agent/ask -> ok(reply, mode, connected, session_id, skills_used)
+//   每条聊天有前端生成的 session_id，历史随请求传给后端保持多轮连贯。
 //
-// 说明：真实后端自己维护多轮上下文（服务端按 session 存消息），前端只需传最新一条
-//       content + session_id，返回 reply（以及可选 emotion / papers 供 UI 展示）。
-//       前端仍本地保存一份消息用于展示与历史，做到「刷新不丢对话」。
+// 原有 /api/chat/* 会话接口仍保留供其它场景使用；本浮窗改用更轻量的 /api/agent/ask。
 
 import type { AgentSettings } from '../types/user'
 
@@ -28,8 +23,9 @@ export interface ChatMessage {
 }
 
 export interface SendContext {
-  token: string | null // 真实后端需要登录态（Bearer）
-  backendSessionId: string | null // 真实后端会话号（首次发送时惰性创建）
+  token: string | null // 已登录时带上，用于加载设置和技能；匿名也可调用
+  sessionId: string | null // 前端会话号，用于后端保持多轮上下文
+  backendSessionId: string | null // 兼容旧 chat_api 会话号
   content: string // 本次用户消息
   settings: AgentSettings | null
   addressName: string // 希望被如何称呼（缺省回退 display_name）
@@ -46,6 +42,8 @@ export interface ChatResult {
   papers?: any[]
   mode?: string
   degraded?: boolean
+  connected?: boolean
+  skillsUsed?: string[]
   backendSessionId?: string | null
 }
 
@@ -149,20 +147,7 @@ function mockReply(ctx: SendContext): string {
   return `${greet} ${body}`
 }
 
-// —— 真实后端：创建会话，返回 session id ——
-export async function createChatSession(token: string, title?: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/chat/sessions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify(title ? { title } : {})
-  })
-  const data = await parseJson(res)
-  const id = data?.session?.id ?? data?.id
-  if (!id) throw new Error('创建会话失败：后端未返回会话 ID')
-  return String(id)
-}
-
-// —— 真实后端：删除会话（best-effort，失败不阻塞 UI）——
+// —— 真实后端：删除旧 chat_api 会话（best-effort，兼容旧数据）——
 export async function deleteChatSession(token: string, backendSessionId: string): Promise<void> {
   await fetch(`${API_BASE}/api/chat/sessions/${backendSessionId}`, {
     method: 'DELETE',
@@ -170,12 +155,23 @@ export async function deleteChatSession(token: string, backendSessionId: string)
   }).catch(() => {})
 }
 
-// —— 真实后端：发送一条消息，返回完整结果 ——
-async function sendChatMessage(token: string, sessionId: string, content: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/api/chat/message`, {
+// —— 真实后端：智能体独立端点（连接 LLM；无需登录）——
+async function sendAgentAsk(
+  token: string | null,
+  content: string,
+  opts: { sessionId?: string | null; history?: ChatMessage[]; useSkills?: boolean } = {}
+): Promise<any> {
+  const { sessionId = null, history = [], useSkills = true } = opts
+  const prior = history
+    .slice(0, Math.max(0, history.length - 1))
+    .slice(-12)
+    .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }))
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${API_BASE}/api/agent/ask`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify({ session_id: sessionId, content })
+    headers,
+    body: JSON.stringify({ prompt: content, session_id: sessionId, history: prior, use_skills: useSkills })
   })
   return parseJson(res)
 }
@@ -192,22 +188,21 @@ export async function sendAgentMessage(ctx: SendContext): Promise<ChatResult> {
       backendSessionId: ctx.backendSessionId
     }
   }
-  if (!ctx.token) {
-    throw new Error('请先登录后再与智能体对话（真实后端需要账号）')
-  }
-  // 真实后端要求先建会话；用首条用户消息作为标题，惰性创建一次。
-  let sid = ctx.backendSessionId
-  if (!sid) {
-    sid = await createChatSession(ctx.token, ctx.content.slice(0, 20))
-  }
-  const data = await sendChatMessage(ctx.token, sid, ctx.content)
+
+  const data = await sendAgentAsk(ctx.token, ctx.content, {
+    sessionId: ctx.sessionId,
+    history: ctx.history,
+    useSkills: true
+  })
+  const reply = String(data?.reply ?? '（智能体没有返回内容）')
+  const unconfigured = data?.connected === false || data?.mode === 'unconfigured'
+  const emotion = unconfigured ? 'confused' : isResearchRequest(ctx.content) ? 'excited' : 'happy'
   return {
-    reply: String(data?.reply ?? '（智能体没有返回内容）'),
-    emotion: data?.emotion,
-    intent: data?.intent,
-    papers: data?.papers,
+    reply,
+    emotion,
     mode: data?.mode,
-    degraded: data?.degraded,
-    backendSessionId: sid
+    connected: data?.connected,
+    skillsUsed: data?.skills_used,
+    backendSessionId: ctx.backendSessionId
   }
 }

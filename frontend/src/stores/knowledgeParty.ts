@@ -3,6 +3,13 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { fetchResearch, DEFAULT_LIMIT, ResearchApiError, type Paper, type ResearchReport } from '../services/research'
+import {
+  favoritePaper,
+  recordView,
+  syncMarks,
+  unfavoritePaper,
+  type MarkPaper
+} from '../services/paperMarks'
 
 export interface Space {
   id: string
@@ -29,6 +36,8 @@ const STORAGE_KEY = 'kp-store-v1'
 interface PersistShape {
   spaces: Space[]
   currentSpaceId: string
+  // 搜索记录改为「全局」：不再按空间隔离，切换空间也能看到全部历史
+  history: HistoryEntry[]
   paperTags: Record<string, string[]> // 全局自定义标签（跨收藏夹共享），按 paper.id
   viewed: Record<string, ViewedEntry>
   mode: KpMode
@@ -113,9 +122,21 @@ function loadState(): PersistShape | null {
         if (!f[k]) f[k] = v as Paper
       }
     }
+    // 搜索记录全局化：优先读顶层 history；没有则从各空间的历史合并迁移（按查询词去重、时间倒序）
+    let history = normalizeHistory(data?.history)
+    if (!history.length) {
+      const merged: HistoryEntry[] = []
+      for (const sp of spaces) {
+        for (const h of sp.history || []) {
+          if (!merged.some((x) => x.q === h.q)) merged.push(h)
+        }
+      }
+      history = merged.sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 20)
+    }
     return {
       spaces,
       currentSpaceId: String(data?.currentSpaceId ?? spaces[0].id),
+      history,
       paperTags: normalizeTags(data?.paperTags),
       viewed: normalizeViewed(data?.viewed),
       // 模式需在校验集合内，否则回退 'search'（'graph' 为有效模式，保留）
@@ -163,6 +184,8 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   )
   const currentSpaceId = ref<string>(saved?.currentSpaceId ?? spaces.value[0].id)
   const favoriteDestinationId = ref<string | null>(null)
+  // 搜索记录：全局共享（不再按空间隔离），切换空间不影响历史显示
+  const history = ref<HistoryEntry[]>(saved?.history ?? [])
   const paperTags = ref<Record<string, string[]>>(saved?.paperTags ?? {}) // 全局自定义标签
   const viewed = ref<Record<string, ViewedEntry>>(saved?.viewed ?? {})
   const mode = ref<KpMode>(saved?.mode ?? 'search')
@@ -204,7 +227,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   const currentSpace = computed(
     () => spaces.value.find((s) => s.id === currentSpaceId.value) ?? spaces.value[0]
   )
-  const currentHistory = computed(() => currentSpace.value.history)
+  const currentHistory = computed(() => history.value)
   // 当前收藏夹的论文列表（切换空间即切换收藏夹）
   const favoriteList = computed(() => Object.values(currentSpace.value.favorites))
   const viewedList = computed(() => Object.values(viewed.value))
@@ -259,20 +282,105 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     if (idx === -1) return
     spaces.value.splice(idx, 1)
     if (currentSpaceId.value === id) currentSpaceId.value = spaces.value[0].id
+    scheduleFullSync() // 整个收藏夹都没了，后端要跟着一起清掉
   }
 
-  // 记录一次搜索到「当前空间」：去重、最近优先、最多 20 条，并带时间戳
+  // 记录一次搜索（全局，不再区分空间）：去重、最近优先、最多 20 条，并带时间戳
   function recordSearch(t: string) {
     const q = t.trim()
     if (!q) return
-    const sp = currentSpace.value
     const entry: HistoryEntry = { q, at: Date.now() }
-    sp.history = [entry, ...sp.history.filter((h) => h.q !== q)].slice(0, 20)
+    history.value = [entry, ...history.value.filter((h) => h.q !== q)].slice(0, 20)
+  }
+
+  /* ------------------------------------------------------------------
+     收藏 / 观看同步到后端
+     以前这两样只躺在 localStorage 里：换设备就没了，长期记忆图谱也看不到。
+     现在登录状态下会顺手同步一份到后端，失败也绝不打断本地操作（静默跳过）。
+  ------------------------------------------------------------------ */
+  function backendToken(): string {
+    try {
+      const raw = localStorage.getItem('kp-user-v2')
+      return raw ? String(JSON.parse(raw)?.token ?? '') : ''
+    } catch {
+      return ''
+    }
+  }
+  function toMark(p: Paper, t?: string): MarkPaper {
+    return {
+      id: p.id,
+      title: p.title,
+      title_original: p.title,
+      year: p.year && p.year > 0 ? p.year : null,
+      source: p.source || null,
+      url: p.url || null,
+      authors: p.authors ?? [],
+      abstract: (p.abstract || '').slice(0, 1200),
+      topic: t ?? topic.value ?? ''
+    }
+  }
+  async function pushFavorite(p: Paper) {
+    const t = backendToken()
+    if (!t) return
+    try {
+      await favoritePaper(t, toMark(p))
+    } catch {
+      /* 同步失败不影响本地使用 */
+    }
+  }
+  async function pushUnfavorite(p: Paper) {
+    const t = backendToken()
+    if (!t) return
+    try {
+      await unfavoritePaper(t, toMark(p))
+    } catch {
+      /* 同步失败不影响本地使用 */
+    }
+  }
+  async function pushView(p: Paper) {
+    const t = backendToken()
+    if (!t) return
+    try {
+      await recordView(t, toMark(p))
+    } catch {
+      /* 同步失败不影响本地使用 */
+    }
+  }
+  // 清空收藏夹、删除空间这类批量操作后做一次「全量覆盖」同步：
+  // 后端没有收藏夹概念，只认「这篇论文你收没收藏」，所以直接以本地剩下的为准。
+  let fullSyncTimer: ReturnType<typeof setTimeout> | null = null
+  function scheduleFullSync() {
+    if (fullSyncTimer) clearTimeout(fullSyncTimer)
+    fullSyncTimer = setTimeout(() => {
+      fullSyncTimer = null
+      void syncFavoritesNow(true)
+    }, 600)
+  }
+  // 登录成功后调用：把本地攒的老数据一次性补到后端
+  async function syncFavoritesNow(replace = false) {
+    const t = backendToken()
+    if (!t) return
+    const seen = new Set<string>()
+    const favs: MarkPaper[] = []
+    for (const s of spaces.value) {
+      for (const p of Object.values(s.favorites)) {
+        if (seen.has(p.id)) continue
+        seen.add(p.id)
+        favs.push(toMark(p, s.name))
+      }
+    }
+    const views: MarkPaper[] = Object.values(viewed.value).map((v) => toMark(v))
+    try {
+      await syncMarks(t, favs, views, replace)
+    } catch {
+      /* 同步失败不影响本地使用 */
+    }
   }
 
   // 记录「点开观看过的文献」：按 paper.id 去重，并写入浏览时间戳
   function markViewed(paper: Paper) {
     viewed.value = { ...viewed.value, [paper.id]: { ...paper, at: Date.now() } }
+    void pushView(paper)
   }
 
   // —— 收藏（按当前空间/收藏夹分组）——
@@ -286,8 +394,12 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     const f = { ...sp.favorites }
     if (f[paper.id]) {
       delete f[paper.id]
+      // 只有其它收藏夹里也没有这篇了，才真的通知后端取消收藏
+      const still = spaces.value.some((s) => s.id !== sp.id && s.favorites[paper.id])
+      if (!still) void pushUnfavorite(paper)
     } else {
       f[paper.id] = { ...paper }
+      void pushFavorite(paper)
     }
     sp.favorites = f
   }
@@ -307,31 +419,39 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     const sp = spaces.value.find((s) => s.id === spaceId)
     if (!sp) return
     sp.favorites = { ...sp.favorites, [paper.id]: { ...paper } }
+    void pushFavorite(paper)
   }
 
   // 从指定收藏夹移除该论文
   function removeFromSpace(spaceId: string, paperId: string) {
     const sp = spaces.value.find((s) => s.id === spaceId)
     if (!sp) return
+    const target = sp.favorites[paperId]
     const f = { ...sp.favorites }
     delete f[paperId]
     sp.favorites = f
+    const still = spaces.value.some((s) => s.id !== spaceId && s.favorites[paperId])
+    if (target && !still) void pushUnfavorite(target)
   }
 
   // 取消该论文在「所有」收藏夹里的收藏
   function cancelAllFavorites(paperId: string) {
+    let target: Paper | null = null
     for (const s of spaces.value) {
       if (s.favorites[paperId]) {
+        target = s.favorites[paperId]
         const f = { ...s.favorites }
         delete f[paperId]
         s.favorites = f
       }
     }
+    if (target) void pushUnfavorite(target)
   }
 
   // 清空「当前空间」这个收藏夹
   function clearFavorites() {
     currentSpace.value.favorites = {}
+    scheduleFullSync() // 后端要跟着一起清掉，所以做一次「以本地为准」的全量同步
   }
 
   function clearViewed() {
@@ -385,7 +505,8 @@ export const useKpStore = defineStore('knowledgeParty', () => {
       if (loading.value) phase.value = 'analyzing'
     }, 2500)
     try {
-      const res = await fetchResearch(t, DEFAULT_LIMIT)
+      // 必须带上登录态：后端只有在认出用户时才把这次检索的关键词沉淀进长期图谱
+      const res = await fetchResearch(t, DEFAULT_LIMIT, backendToken())
       papers.value = res.papers
       report.value = res.report
       reportError.value = res.reportError
@@ -414,11 +535,12 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   }
 
   watch(
-    [spaces, currentSpaceId, paperTags, viewed, mode, autoSortByTopic],
+    [spaces, currentSpaceId, history, paperTags, viewed, mode, autoSortByTopic],
     () => {
       const data: PersistShape = {
         spaces: spaces.value,
         currentSpaceId: currentSpaceId.value,
+        history: history.value,
         paperTags: paperTags.value,
         viewed: viewed.value,
         mode: mode.value,
@@ -436,6 +558,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
   return {
     spaces,
     currentSpaceId,
+    history,
     paperTags,
     viewed,
     mode,
@@ -476,6 +599,7 @@ export const useKpStore = defineStore('knowledgeParty', () => {
     removeFromSpace,
     cancelAllFavorites,
     clearFavorites,
+    syncFavoritesNow,
     clearViewed,
     tagsOf,
     addTag,
